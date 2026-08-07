@@ -1426,6 +1426,7 @@
             { id: 'sad', icon: '😭', name: 'Buồn bã' }
         ];
 
+        /* BỔ SUNG THÊM RẤT NHIỀU ICON VÀ BÀO GỒM CẢ ICON CẢM XÚC TRONG MỤC THÊM BỚT HOẠT ĐỘNG */
         const ICON_LIST = [
             '🌅', '🪥', '🥣', '👕', '🧼', '🍲', '🧃', '🛌', '🧸', '📚', '🚿', '🦷', '😴', 
             '🚲', '🧹', '🎨', '🎵', '🌱', '🥛', '🎁', '⚽', '🏀', '🧩', '🚗', '✈️', '🍳', 
@@ -1536,7 +1537,7 @@
             }
         }
 
-        /* ---------------- TÍNH NĂNG RESET TẤT CẢ CÁC BUỔI SAU 0:00 NỬA ĐÊM ---------------- */
+        /* ---------------- TÍNH NĂNG RESET SAU 0:00 NỬA ĐÊM SANG NGÀY MỚI ---------------- */
         function checkAutoReset() {
             const now = new Date();
             const currentDateStr = now.toDateString();
@@ -1548,18 +1549,28 @@
                 return;
             }
 
-            // Kiểm tra khi vừa qua 0:00:00 sang ngày mới
-            if (lastCheckedDate !== currentDateStr) {
+            // Nếu sang ngày mới (sau 0:00) hoặc chuyển buổi
+            if (lastCheckedDate !== currentDateStr || lastCheckedSlot !== currentSlot) {
                 let isChanged = false;
                 kidsData.forEach(kid => {
-                    // Reset hoàn toàn toàn bộ trạng thái hoàn thành hoạt động của TẤT CẢ CÁC BUỔI
-                    kid.completedTasks = {};
-                    kid.emotion = null;
-                    kid.todayDiamonds = 0;
-                    kid.todayHearts = 0;
-                    isChanged = true;
+                    // Reset cảm xúc và danh sách hoạt động đã hoàn thành của buổi/ngày
+                    if (kid.emotion || Object.keys(kid.completedTasks || {}).length > 0) {
+                        kid.emotion = null;
+                        kid.completedTasks = {};
+                        isChanged = true;
+                    }
+                    // Nếu chính xác là đã qua ngày mới 0:00 -> Reset lại số vật phẩm nhận trong ngày
+                    if (lastCheckedDate !== currentDateStr) {
+                        if (kid.todayDiamonds !== 0) {
+                            kid.todayDiamonds = 0;
+                            isChanged = true;
+                        }
+                        if (kid.todayHearts !== 0) {
+                            kid.todayHearts = 0;
+                            isChanged = true;
+                        }
+                    }
                 });
-
                 lastCheckedDate = currentDateStr;
                 lastCheckedSlot = currentSlot;
 
@@ -1567,10 +1578,6 @@
                     saveData();
                     renderView();
                 }
-            } else if (lastCheckedSlot !== currentSlot) {
-                // Tự động chuyển khung giờ làm việc theo thời gian thực
-                lastCheckedSlot = currentSlot;
-                renderView();
             }
         }
 
@@ -1962,6 +1969,7 @@
                 gemsInsideHtml += `<span class="crystal-gem-item">${symbol}</span>`;
             }
 
+            // Tính toán kim cương to bự 7 màu và trái tim to bự
             const bigDiamondsCount = Math.floor((kid.diamonds || 0) / 10000);
             const bigHeartsCount = Math.floor((kid.hearts || 0) / 10000);
 
@@ -2093,6 +2101,7 @@
                         </div>
                         <div class="today-diamonds-badge">Hôm nay: 💎+${(kid.todayDiamonds || 0).toLocaleString()} | ❤️+${(kid.todayHearts || 0).toLocaleString()}</div>
                         
+                        <!-- Ô THÊM MỚI: KIM CƯƠNG TO BỰ 7 MÀU VÀ TRÁI TIM TO BỰ -->
                         <div class="big-milestones-container">
                             <div class="big-milestone-box diamond-bg" title="Mỗi 10,000 Kim Cương nhỏ = 1 Kim Cương To Bự 7 Màu">
                                 <div class="big-milestone-title">💎 To Bự</div>
@@ -2243,34 +2252,36 @@
                 gameHtml += `
                     <div style="font-size:10px; font-weight:bold; color:#2B6CB0;">🌩️ Đập Tan Mệt Mỏi!</div>
                     <div class="interactive-game-icon" onclick="playKidGameStep(${kidIndex})">🌩️</div>
-                    <div style="font-size:8px; color:#4A5568;">Chạm liên tục để xua tan cảm xúc xấu!</div>
+                    <div style="font-size:8px; color:#4A5568;">Bấm 5 lần để đám mây biến mất!</div>
                 `;
             }
-            gameHtml += `<button class="game-close-btn" onclick="toggleKidGame(${kidIndex})">Xóng</button></div>`;
+            gameHtml += `<button class="game-close-btn" onclick="toggleKidGame(${kidIndex})">✕ Đóng trò chơi</button></div>`;
             container.innerHTML = gameHtml;
         }
 
         function playKidGameStep(kidIndex) {
             playSound('pop');
-            if (typeof confetti === 'function') confetti({ particleCount: 25, spread: 40, origin: { y: 0.8 } });
+            if (!activeGames[kidIndex]) return;
+            activeGames[kidIndex].count++;
+            if (activeGames[kidIndex].count >= 5) {
+                playSound('chest');
+                delete activeGames[kidIndex];
+                renderDashboard();
+            }
         }
 
         function handleStartTaskClick(kidIndex, sessionId, taskId) {
-            const kid = kidsData[kidIndex];
-            const task = kid.tasks[sessionId].find(t => t.id === taskId);
+            getAudioContext(); 
+            const task = kidsData[kidIndex].tasks[sessionId].find(t => t.id === taskId);
             if (!task) return;
 
             if (task.pin && task.pin.trim() !== "") {
-                openUniversalPinModal('TASK_SPECIFIC_PIN', {
-                    kidIndex, sessionId, taskId, requiredPin: task.pin.trim()
-                });
+                openUniversalPinModal('TASK_SPECIFIC_PIN', { kidIndex, sessionId, taskId, requiredPin: task.pin.trim() });
                 return;
             }
 
-            const currentHour = new Date().getHours();
-            const activeSession = getCurrentSession(currentHour);
-
-            if (sessionId !== activeSession) {
+            const currentActiveSession = getCurrentSession(new Date().getHours());
+            if (sessionId !== currentActiveSession) {
                 openHoldModal(kidIndex, sessionId, taskId);
             } else {
                 startKidTimerInline(kidIndex, sessionId, taskId);
@@ -2278,47 +2289,50 @@
         }
 
         function openHoldModal(kidIndex, sessionId, taskId) {
-            const modal = document.getElementById('hold-modal');
-            modal.style.display = 'flex';
-
-            const btn = document.getElementById('hold-action-btn');
+            playSound('pop');
+            const holdModal = document.getElementById('hold-modal');
+            const actionBtn = document.getElementById('hold-action-btn');
             const fill = document.getElementById('hold-fill');
-            const countdownText = document.getElementById('hold-countdown-num');
+            const numText = document.getElementById('hold-countdown-num');
 
-            let holdStartTime = 0;
+            let count = 5;
             fill.style.height = '0%';
-            countdownText.innerText = '5s';
+            numText.innerText = '5s';
+
+            holdModal.style.display = 'flex';
 
             const startHold = (e) => {
                 e.preventDefault();
-                holdStartTime = Date.now();
+                let elapsed = 0;
+                fill.style.height = '0%';
+                
                 holdInterval = setInterval(() => {
-                    const elapsed = (Date.now() - holdStartTime) / 1000;
-                    const remaining = Math.max(0, 5 - elapsed);
-                    const percent = Math.min(100, (elapsed / 5) * 100);
+                    elapsed += 100;
+                    const pct = Math.min((elapsed / 5000) * 100, 100);
+                    fill.style.height = `${pct}%`;
+                    const remainSec = Math.ceil((5000 - elapsed) / 1000);
+                    numText.innerText = `${remainSec}s`;
 
-                    fill.style.height = `${percent}%`;
-                    countdownText.innerText = `${remaining.toFixed(1)}s`;
-
-                    if (elapsed >= 5) {
+                    if (elapsed >= 5000) {
                         clearInterval(holdInterval);
                         closeHoldModal();
+                        playSound('diamond');
                         startKidTimerInline(kidIndex, sessionId, taskId);
                     }
-                }, 50);
+                }, 100);
             };
 
-            const endHold = () => {
+            const stopHold = () => {
                 if (holdInterval) clearInterval(holdInterval);
                 fill.style.height = '0%';
-                countdownText.innerText = '5s';
+                numText.innerText = '5s';
             };
 
-            btn.onmousedown = startHold;
-            btn.onmouseup = endHold;
-            btn.mouseleave = endHold;
-            btn.ontouchstart = startHold;
-            btn.ontouchend = endHold;
+            actionBtn.onmousedown = startHold;
+            actionBtn.onmouseup = stopHold;
+            actionBtn.onmouseleave = stopHold;
+            actionBtn.ontouchstart = startHold;
+            actionBtn.ontouchend = stopHold;
         }
 
         function closeHoldModal() {
@@ -2328,35 +2342,48 @@
 
         function startKidTimerInline(kidIndex, sessionId, taskId) {
             playSound('pop');
-            const kid = kidsData[kidIndex];
-            const task = kid.tasks[sessionId].find(t => t.id === taskId);
+            const task = kidsData[kidIndex].tasks[sessionId].find(t => t.id === taskId);
             if (!task) return;
+
+            if (kidTimers[kidIndex]) {
+                clearInterval(kidTimers[kidIndex].intervalId);
+            }
 
             const pet = PET_ICONS[Math.floor(Math.random() * PET_ICONS.length)];
 
             kidTimers[kidIndex] = {
-                sessionId,
-                taskId,
+                sessionId, taskId,
                 taskTitle: task.title,
                 icon: task.icon,
+                petIcon: pet,
+                remaining: task.timeSec,
+                total: task.timeSec,
                 diamonds: task.diamonds,
                 itemType: task.itemType || 'diamond',
-                total: task.timeSec,
-                remaining: task.timeSec,
-                petIcon: pet,
                 isFinished: false,
-                interval: setInterval(() => {
+                intervalId: setInterval(() => {
                     if (kidTimers[kidIndex].remaining > 0) {
                         kidTimers[kidIndex].remaining--;
                         renderActiveTimers();
                     } else {
-                        clearInterval(kidTimers[kidIndex].interval);
-                        kidTimers[kidIndex].isFinished = true;
-                        playSound('alarm');
+                        if (!kidTimers[kidIndex].isFinished) {
+                            kidTimers[kidIndex].isFinished = true;
+                            playSound('alarm');
+                        }
                         renderActiveTimers();
                     }
                 }, 1000)
             };
+
+            renderActiveTimers();
+        }
+
+        function cancelKidTimerInline(kidIndex) {
+            playSound('pop');
+            if (kidTimers[kidIndex]) {
+                clearInterval(kidTimers[kidIndex].intervalId);
+                delete kidTimers[kidIndex];
+            }
             renderActiveTimers();
         }
 
@@ -2364,50 +2391,45 @@
             const timer = kidTimers[kidIndex];
             if (!timer) return;
 
-            if (timer.interval) clearInterval(timer.interval);
-
             const kid = kidsData[kidIndex];
             if (!kid.completedTasks) kid.completedTasks = {};
             kid.completedTasks[timer.taskId] = true;
 
-            const addedAmount = timer.diamonds;
             const itemType = timer.itemType || 'diamond';
+            const amount = timer.diamonds;
 
             if (itemType === 'heart') {
-                kid.hearts = (kid.hearts || 0) + addedAmount;
-                kid.todayHearts = (kid.todayHearts || 0) + addedAmount;
+                kid.hearts = (kid.hearts || 0) + amount;
+                kid.todayHearts = (kid.todayHearts || 0) + amount;
             } else {
-                kid.diamonds = (kid.diamonds || 0) + addedAmount;
-                kid.todayDiamonds = (kid.todayDiamonds || 0) + addedAmount;
+                kid.diamonds = (kid.diamonds || 0) + amount;
+                kid.todayDiamonds = (kid.todayDiamonds || 0) + amount;
             }
 
             if (!kid.lastCollectedItems) kid.lastCollectedItems = [];
-            kid.lastCollectedItems.push(itemType);
-            if (kid.lastCollectedItems.length > 20) kid.lastCollectedItems.shift();
+            kid.lastCollectedItems.unshift(itemType);
+            if (kid.lastCollectedItems.length > 20) kid.lastCollectedItems.pop();
 
-            triggerFlyingDiamonds(btnElem, addedAmount, itemType);
-
-            delete kidTimers[kidIndex];
             saveData();
-            renderActiveTimers();
+            triggerFlyingDiamonds(btnElem, amount, itemType);
 
-            document.getElementById('reward-diamonds-display').innerText = `+${addedAmount} ${itemType === 'heart' ? '❤️' : '💎'}`;
+            if (kidTimers[kidIndex]) {
+                clearInterval(kidTimers[kidIndex].intervalId);
+                delete kidTimers[kidIndex];
+            }
+
+            renderActiveTimers();
+            renderView();
+
+            const rewardDisplay = document.getElementById('reward-diamonds-display');
+            const symbol = itemType === 'heart' ? '❤️' : '💎';
+            rewardDisplay.innerText = `+${amount} ${symbol}`;
             document.getElementById('reward-modal').style.display = 'flex';
             playSound('chest');
         }
 
-        function cancelKidTimerInline(kidIndex) {
-            playSound('pop');
-            if (kidTimers[kidIndex] && kidTimers[kidIndex].interval) {
-                clearInterval(kidTimers[kidIndex].interval);
-            }
-            delete kidTimers[kidIndex];
-            renderActiveTimers();
-        }
-
         function closeRewardModal() {
             document.getElementById('reward-modal').style.display = 'none';
-            renderDashboard();
         }
 
         function resetSingleTask(kidIndex, taskId) {
@@ -2430,30 +2452,33 @@
         }
 
         function editKidName(kidIndex) {
-            const newName = prompt("Chỉnh sửa tên bé:", kidsData[kidIndex].name);
+            const newName = prompt("✏️ Nhập tên mới cho bé:", kidsData[kidIndex].name);
             if (newName && newName.trim() !== "") {
                 kidsData[kidIndex].name = newName.trim();
                 saveData();
-                renderDashboard();
+                renderView();
             }
         }
 
         function openManageTaskModal() {
-            populateIconSelector();
-            populateKidDropdowns();
+            playSound('pop');
+            renderIconSelector();
             loadTasksForManagement();
+            populateKidSelects();
+            renderKidsManageList();
             document.getElementById('add-task-modal').style.display = 'flex';
         }
 
         function closeManageTaskModal() {
             document.getElementById('add-task-modal').style.display = 'none';
+            resetTaskFormMode();
         }
 
-        function populateIconSelector() {
-            const container = document.getElementById('icon-selector');
-            container.innerHTML = '';
+        function renderIconSelector() {
+            const selector = document.getElementById('icon-selector');
+            selector.innerHTML = '';
             ICON_LIST.forEach(icon => {
-                const opt = document.createElement('span');
+                const opt = document.createElement('div');
                 opt.className = `icon-option ${icon === selectedIcon ? 'selected' : ''}`;
                 opt.innerText = icon;
                 opt.onclick = () => {
@@ -2461,177 +2486,73 @@
                     document.querySelectorAll('.icon-option').forEach(el => el.classList.remove('selected'));
                     opt.classList.add('selected');
                 };
-                container.appendChild(opt);
+                selector.appendChild(opt);
             });
-        }
-
-        function populateKidDropdowns() {
-            const selects = [
-                document.getElementById('bonus-diamond-kid-select'),
-                document.getElementById('reset-tasks-kid-select'),
-                document.getElementById('reset-kid-select')
-            ];
-
-            selects.forEach(sel => {
-                if (!sel) return;
-                sel.innerHTML = '';
-                kidsData.forEach((kid, idx) => {
-                    const opt = document.createElement('option');
-                    opt.value = idx;
-                    opt.innerText = `Bé ${kid.name}`;
-                    sel.appendChild(opt);
-                });
-            });
-
-            const kidsManageList = document.getElementById('kids-manage-list');
-            if (kidsManageList) {
-                kidsManageList.innerHTML = '';
-                kidsData.forEach((kid, idx) => {
-                    const div = document.createElement('div');
-                    div.style.cssText = "display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px dashed #E2E8F0; font-size:11px;";
-                    div.innerHTML = `
-                        <span><b>${kid.name}</b> (PIN: ${kid.pin || '1234'})</span>
-                        <div style="display:flex; gap:4px;">
-                            <button class="btn-save" style="font-size:9px; padding:2px 6px; background:#DD6B20;" onclick="changeKidPin(${idx})">Đổi PIN</button>
-                            ${kidsData.length > 1 ? `<button class="btn-cancel" style="font-size:9px; padding:2px 6px; background:#E53E3E; color:white;" onclick="deleteKid(${idx})">Xóa</button>` : ''}
-                        </div>
-                    `;
-                    kidsManageList.appendChild(div);
-                });
-            }
-        }
-
-        function changeKidPin(kidIndex) {
-            const newPin = prompt(`Nhập PIN mới cho bé ${kidsData[kidIndex].name} (4 chữ số):`, kidsData[kidIndex].pin || "1234");
-            if (newPin && newPin.trim() !== "") {
-                kidsData[kidIndex].pin = newPin.trim();
-                saveData();
-                populateKidDropdowns();
-                alert("✅ Đã cập nhật PIN bé thành công!");
-            }
-        }
-
-        function addNewKid() {
-            openUniversalPinModal('ADMIN_AUTH', {
-                onSuccess: () => {
-                    const name = prompt("Nhập tên bé mới:");
-                    if (!name || name.trim() === "") return;
-
-                    const newKid = {
-                        id: 'k' + Date.now(),
-                        name: name.trim(),
-                        pin: '1234',
-                        avatar: 'https://images.unsplash.com/photo-1543332164-6e82f355badc?auto=format&fit=crop&w=400&q=80',
-                        diamonds: 0, todayDiamonds: 0, hearts: 0, todayHearts: 0,
-                        emotion: null, completedTasks: {}, lastCollectedItems: [],
-                        tasks: JSON.parse(JSON.stringify(DEFAULT_TASKS))
-                    };
-
-                    kidsData.push(newKid);
-                    saveData();
-                    populateKidDropdowns();
-                    renderView();
-                    alert("✅ Đã thêm bé thành công!");
-                }
-            });
-        }
-
-        function deleteKid(kidIndex) {
-            openUniversalPinModal('ADMIN_AUTH', {
-                onSuccess: () => {
-                    if (confirm(`Bạn chắc chắn muốn xóa bé ${kidsData[kidIndex].name}?`)) {
-                        kidsData.splice(kidIndex, 1);
-                        if (selectedKidIndex === kidIndex) selectedKidIndex = null;
-                        saveData();
-                        populateKidDropdowns();
-                        renderView();
-                    }
-                }
-            });
-        }
-
-        function executeAdjustDiamonds() {
-            const kidIndex = parseInt(document.getElementById('bonus-diamond-kid-select').value);
-            const itemType = document.getElementById('bonus-item-type').value;
-            const action = document.getElementById('bonus-diamond-action').value;
-            const amount = parseInt(document.getElementById('bonus-diamond-amount').value);
-
-            if (isNaN(amount) || amount <= 0) return alert("❌ Số lượng không hợp lệ!");
-
-            const kid = kidsData[kidIndex];
-            const change = action === 'add' ? amount : -amount;
-
-            if (itemType === 'heart') {
-                kid.hearts = Math.max(0, (kid.hearts || 0) + change);
-                if (action === 'add') kid.todayHearts = (kid.todayHearts || 0) + amount;
-            } else {
-                kid.diamonds = Math.max(0, (kid.diamonds || 0) + change);
-                if (action === 'add') kid.todayDiamonds = (kid.todayDiamonds || 0) + amount;
-            }
-
-            saveData();
-            renderView();
-            playSound('chest');
-            alert(`✅ Đã ${action === 'add' ? 'thưởng' : 'trừ'} ${amount} ${itemType === 'heart' ? '❤️' : '💎'} cho bé ${kid.name}!`);
         }
 
         function loadTasksForManagement() {
-            const session = document.getElementById('manage-task-session-select').value;
+            const sess = document.getElementById('manage-task-session-select').value;
             const container = document.getElementById('existing-tasks-manage-list');
             container.innerHTML = '';
 
-            const sampleKid = kidsData[0];
-            if (!sampleKid || !sampleKid.tasks || !sampleKid.tasks[session]) return;
+            const referenceTasks = kidsData[0] ? (kidsData[0].tasks[sess] || []) : [];
 
-            sampleKid.tasks[session].forEach(task => {
+            referenceTasks.forEach(task => {
+                const item = document.createElement('div');
+                item.style.cssText = 'display:flex; justify-content:space-between; align-items:center; background:#FFF; padding:6px; border-radius:8px; border:1px solid #E2E8F0; font-size:11px;';
+                const pinTag = task.pin ? ' 🔒' : '';
                 const itemIcon = task.itemType === 'heart' ? '❤️' : '💎';
-                const div = document.createElement('div');
-                div.style.cssText = "display:flex; justify-content:space-between; align-items:center; background:white; padding:4px 8px; border-radius:6px; border:1px solid #E2E8F0; font-size:10px;";
-                div.innerHTML = `
-                    <span>${task.icon} <b>${task.title}</b> (${task.timeSec}s - ${itemIcon}${task.diamonds})</span>
+
+                item.innerHTML = `
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span>${task.icon}</span>
+                        <span style="font-weight:bold;">${task.title}${pinTag}</span>
+                        <span style="color:#718096; font-size:10px;">(${task.timeSec}s - ${itemIcon}+${task.diamonds})</span>
+                    </div>
                     <div style="display:flex; gap:4px;">
-                        <button class="btn-save" style="font-size:9px; padding:2px 6px; background:#D69E2E;" onclick="editExistingTask('${session}', '${task.id}')">Sửa</button>
-                        <button class="btn-cancel" style="font-size:9px; padding:2px 6px; background:#E53E3E; color:white;" onclick="deleteTaskFromAll('${session}', '${task.id}')">Xóa</button>
+                        <button style="background:#ED8936; color:white; border:none; padding:2px 6px; border-radius:6px; font-weight:bold; cursor:pointer;" onclick="setEditTaskMode('${sess}', '${task.id}')">✏️ Sửa</button>
+                        <button style="background:#E53E3E; color:white; border:none; padding:2px 6px; border-radius:6px; font-weight:bold; cursor:pointer;" onclick="deleteTaskFromAll('${sess}', '${task.id}')">🗑️ Xóa</button>
                     </div>
                 `;
-                container.appendChild(div);
+                container.appendChild(item);
             });
         }
 
-        function editExistingTask(session, taskId) {
-            const sampleKid = kidsData[0];
-            const task = sampleKid.tasks[session].find(t => t.id === taskId);
-            if (!task) return;
+        function setEditTaskMode(sessionId, taskId) {
+            const referenceTask = kidsData[0].tasks[sessionId].find(t => t.id === taskId);
+            if (!referenceTask) return;
 
-            document.getElementById('form-task-action-title').innerText = "✏️ SỬA NHIỆM VỤ";
-            document.getElementById('edit-task-id-hidden').value = taskId;
-            document.getElementById('new-task-session').value = session;
-            document.getElementById('new-task-title').value = task.title;
-            document.getElementById('new-task-time').value = task.timeSec;
-            document.getElementById('new-task-item-type').value = task.itemType || 'diamond';
-            document.getElementById('new-task-diamonds').value = task.diamonds;
-            document.getElementById('new-task-pin').value = task.pin || '';
+            document.getElementById('edit-task-id-hidden').value = referenceTask.id;
+            document.getElementById('new-task-session').value = sessionId;
+            document.getElementById('new-task-title').value = referenceTask.title;
+            document.getElementById('new-task-time').value = referenceTask.timeSec;
+            document.getElementById('new-task-item-type').value = referenceTask.itemType || 'diamond';
+            document.getElementById('new-task-diamonds').value = referenceTask.diamonds;
+            document.getElementById('new-task-pin').value = referenceTask.pin || '';
 
-            selectedIcon = task.icon;
-            populateIconSelector();
+            selectedIcon = referenceTask.icon;
+            renderIconSelector();
 
-            document.getElementById('btn-save-task-action').innerText = "💾 Cập Nhật Cho Tất Cả Bé";
-            document.getElementById('btn-cancel-edit-task').style.display = "block";
+            document.getElementById('form-task-action-title').innerText = '✏️ CHỈNH SỬA NHIỆM VỤ (ĐỒNG BỘ TẤT CẢ)';
+            document.getElementById('btn-save-task-action').innerText = '💾 Lưu Thay Đổi Cho Tất Cả Các Bé';
+            document.getElementById('btn-cancel-edit-task').style.display = 'block';
         }
 
         function resetTaskFormMode() {
-            document.getElementById('form-task-action-title').innerText = "➕ THÊM NHIỆM VỤ MỚI CHO TẤT CẢ BÉ";
-            document.getElementById('edit-task-id-hidden').value = "";
-            document.getElementById('new-task-title').value = "";
-            document.getElementById('new-task-time').value = "15";
-            document.getElementById('new-task-diamonds').value = "100";
-            document.getElementById('new-task-pin').value = "";
-            document.getElementById('btn-save-task-action').innerText = "➕ Lưu Nhiệm Vụ Cho Tất Cả Các Bé";
-            document.getElementById('btn-cancel-edit-task').style.display = "none";
+            document.getElementById('edit-task-id-hidden').value = '';
+            document.getElementById('new-task-title').value = '';
+            document.getElementById('new-task-time').value = '15';
+            document.getElementById('new-task-item-type').value = 'diamond';
+            document.getElementById('new-task-diamonds').value = '100';
+            document.getElementById('new-task-pin').value = '';
+
+            document.getElementById('form-task-action-title').innerText = '➕ THÊM NHIỆM VỤ MỚI CHO TẤT CẢ BÉ';
+            document.getElementById('btn-save-task-action').innerText = '➕ Lưu Nhiệm Vụ Cho Tất Cả Các Bé';
+            document.getElementById('btn-cancel-edit-task').style.display = 'none';
         }
 
         function saveNewTaskToAll() {
-            const editTaskId = document.getElementById('edit-task-id-hidden').value;
+            const editId = document.getElementById('edit-task-id-hidden').value;
             const session = document.getElementById('new-task-session').value;
             const title = document.getElementById('new-task-title').value.trim();
             const timeSec = parseInt(document.getElementById('new-task-time').value);
@@ -2639,51 +2560,45 @@
             const diamonds = parseInt(document.getElementById('new-task-diamonds').value);
             const pin = document.getElementById('new-task-pin').value.trim();
 
-            if (!title) return alert("❌ Vui lòng nhập tên hoạt động!");
-            if (isNaN(timeSec) || timeSec <= 0) return alert("❌ Thời gian không hợp lệ!");
-            if (isNaN(diamonds) || diamonds <= 0) return alert("❌ Phần thưởng không hợp lệ!");
+            if (!title) { alert("❌ Vui lòng nhập tên hoạt động!"); return; }
 
-            kidsData.forEach(kid => {
-                if (!kid.tasks) kid.tasks = JSON.parse(JSON.stringify(DEFAULT_TASKS));
-
-                if (editTaskId) {
-                    const task = kid.tasks[session].find(t => t.id === editTaskId);
-                    if (task) {
-                        task.title = title;
-                        task.timeSec = timeSec;
-                        task.itemType = itemType;
-                        task.diamonds = diamonds;
-                        task.icon = selectedIcon;
-                        task.pin = pin;
-                    }
-                } else {
-                    const newTask = {
-                        id: 't' + Date.now(),
-                        icon: selectedIcon,
-                        title,
-                        timeSec,
-                        diamonds,
-                        itemType,
-                        pin
-                    };
-                    kid.tasks[session].push(newTask);
-                }
-            });
+            if (editId) {
+                kidsData.forEach(kid => {
+                    Object.keys(kid.tasks).forEach(sKey => {
+                        const idx = kid.tasks[sKey].findIndex(t => t.id === editId);
+                        if (idx !== -1) {
+                            if (sKey === session) {
+                                kid.tasks[sKey][idx] = { id: editId, icon: selectedIcon, title, timeSec, diamonds, itemType, pin };
+                            } else {
+                                kid.tasks[sKey].splice(idx, 1);
+                                kid.tasks[session].push({ id: editId, icon: selectedIcon, title, timeSec, diamonds, itemType, pin });
+                            }
+                        }
+                    });
+                });
+            } else {
+                const newId = 'task_' + Date.now();
+                const newTask = { id: newId, icon: selectedIcon, title, timeSec, diamonds, itemType, pin };
+                kidsData.forEach(kid => {
+                    if (!kid.tasks[session]) kid.tasks[session] = [];
+                    kid.tasks[session].push({ ...newTask });
+                });
+            }
 
             saveData();
-            loadTasksForManagement();
             resetTaskFormMode();
+            loadTasksForManagement();
             renderView();
             playSound('chest');
-            alert("✅ Đã lưu nhiệm vụ thành công!");
+            alert(editId ? "✅ Đã cập nhật nhiệm vụ thành công!" : "✅ Đã thêm nhiệm vụ mới cho tất cả các bé!");
         }
 
-        function deleteTaskFromAll(session, taskId) {
-            if (!confirm("Bạn chắc chắn muốn xóa nhiệm vụ này khỏi tất cả các bé?")) return;
+        function deleteTaskFromAll(sessionId, taskId) {
+            if (!confirm("❓ Bạn có chắc muốn xóa nhiệm vụ này khỏi tất cả các bé?")) return;
 
             kidsData.forEach(kid => {
-                if (kid.tasks && kid.tasks[session]) {
-                    kid.tasks[session] = kid.tasks[session].filter(t => t.id !== taskId);
+                if (kid.tasks[sessionId]) {
+                    kid.tasks[sessionId] = kid.tasks[sessionId].filter(t => t.id !== taskId);
                 }
             });
 
@@ -2693,23 +2608,156 @@
             playSound('pop');
         }
 
+        function populateKidSelects() {
+            const bonusSel = document.getElementById('bonus-diamond-kid-select');
+            const resetSel = document.getElementById('reset-kid-select');
+            const resetTasksSel = document.getElementById('reset-tasks-kid-select');
+
+            bonusSel.innerHTML = '';
+            resetSel.innerHTML = '';
+            resetTasksSel.innerHTML = '';
+
+            kidsData.forEach((kid, idx) => {
+                const opt1 = new Option(kid.name, idx);
+                const opt2 = new Option(kid.name, idx);
+                const opt3 = new Option(kid.name, idx);
+
+                bonusSel.add(opt1);
+                resetSel.add(opt2);
+                resetTasksSel.add(opt3);
+            });
+        }
+
+        function executeAdjustDiamonds() {
+            const kidIdx = parseInt(document.getElementById('bonus-diamond-kid-select').value);
+            const itemType = document.getElementById('bonus-item-type').value;
+            const action = document.getElementById('bonus-diamond-action').value;
+            const amount = parseInt(document.getElementById('bonus-diamond-amount').value);
+
+            if (isNaN(amount) || amount <= 0) return;
+
+            const kid = kidsData[kidIdx];
+            const isAdd = action === 'add';
+            const val = isAdd ? amount : -amount;
+
+            if (itemType === 'heart') {
+                kid.hearts = Math.max(0, (kid.hearts || 0) + val);
+                kid.todayHearts = Math.max(0, (kid.todayHearts || 0) + val);
+            } else {
+                kid.diamonds = Math.max(0, (kid.diamonds || 0) + val);
+                kid.todayDiamonds = Math.max(0, (kid.todayDiamonds || 0) + val);
+            }
+
+            saveData();
+            renderView();
+            playSound('chest');
+            alert(`✅ Đã ${isAdd ? 'thưởng' : 'trừ'} ${amount} ${itemType === 'heart' ? '❤️ Trái Tim' : '💎 Kim Cương'} cho bé ${kid.name}!`);
+        }
+
+        function renderKidsManageList() {
+            const container = document.getElementById('kids-manage-list');
+            container.innerHTML = '';
+
+            kidsData.forEach((kid, idx) => {
+                const item = document.createElement('div');
+                item.style.cssText = 'display:flex; justify-content:space-between; align-items:center; background:white; padding:6px; border-radius:8px; border:1px solid #E2E8F0; margin-bottom:4px; font-size:11px;';
+                item.innerHTML = `
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <img src="${kid.avatar}" style="width:28px; height:28px; border-radius:50%; object-fit:cover;">
+                        <div>
+                            <div style="font-weight:bold; color:#2D3748;">${kid.name}</div>
+                            <div style="font-size:9px; color:#718096;">PIN: <b>${kid.pin || '1234'}</b></div>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:4px;">
+                        <button style="background:#3182CE; color:white; border:none; padding:2px 6px; border-radius:6px; font-weight:bold; cursor:pointer;" onclick="changeKidPin(${idx})">🔑 Đổi PIN</button>
+                        <button style="background:#E53E3E; color:white; border:none; padding:2px 6px; border-radius:6px; font-weight:bold; cursor:pointer;" onclick="deleteKid(${idx})">🗑️ Xóa</button>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function changeKidPin(kidIndex) {
+            const newPin = prompt(`🔑 Nhập mật khẩu PIN mới cho bé ${kidsData[kidIndex].name} (4 chữ số):`, kidsData[kidIndex].pin || "1234");
+            if (newPin && newPin.trim() !== "") {
+                kidsData[kidIndex].pin = newPin.trim();
+                saveData();
+                renderKidsManageList();
+                alert("✅ Đã đổi PIN thành công!");
+            }
+        }
+
+        function addNewKid() {
+            openUniversalPinModal('ADMIN_AUTH', {
+                onSuccess: () => {
+                    const name = prompt("👶 Nhập tên cho bé mới:");
+                    if (!name || name.trim() === "") return;
+
+                    const newKid = {
+                        id: 'k_' + Date.now(),
+                        name: name.trim(),
+                        pin: '1234',
+                        avatar: 'https://images.unsplash.com/photo-1543332164-6e82f355badc?auto=format&fit=crop&w=400&q=80',
+                        diamonds: 0,
+                        todayDiamonds: 0,
+                        hearts: 0,
+                        todayHearts: 0,
+                        emotion: null,
+                        completedTasks: {},
+                        lastCollectedItems: [],
+                        tasks: JSON.parse(JSON.stringify(DEFAULT_TASKS))
+                    };
+
+                    kidsData.push(newKid);
+                    saveData();
+                    populateKidSelects();
+                    renderKidsManageList();
+                    renderView();
+                    alert(`✅ Đã thêm bé ${newKid.name} thành công! Mật khẩu PIN mặc định là 1234.`);
+                }
+            });
+        }
+
+        function deleteKid(kidIndex) {
+            openUniversalPinModal('ADMIN_AUTH', {
+                onSuccess: () => {
+                    if (kidsData.length <= 1) {
+                        alert("❌ Phải giữ lại ít nhất 1 bé trên hệ thống!");
+                        return;
+                    }
+
+                    if (confirm(`❓ Bạn có chắc muốn xóa bé ${kidsData[kidIndex].name}?`)) {
+                        kidsData.splice(kidIndex, 1);
+                        if (selectedKidIndex === kidIndex) selectedKidIndex = null;
+                        else if (selectedKidIndex > kidIndex) selectedKidIndex--;
+
+                        saveData();
+                        populateKidSelects();
+                        renderKidsManageList();
+                        renderView();
+                    }
+                }
+            });
+        }
+
         function promptResetTasksByPasscode() {
             openUniversalPinModal('RESET_ALL_TASKS');
         }
 
         function executeResetTasksAction() {
-            const kidIndex = parseInt(document.getElementById('reset-tasks-kid-select').value);
+            const kidIdx = parseInt(document.getElementById('reset-tasks-kid-select').value);
             const scope = document.getElementById('reset-tasks-scope-select').value;
-            const kid = kidsData[kidIndex];
+            const kid = kidsData[kidIdx];
 
-            if (!kid.completedTasks) kid.completedTasks = {};
+            if (!kid) return;
 
             if (scope === 'all') {
                 kid.completedTasks = {};
             } else {
                 const tasksInScope = kid.tasks[scope] || [];
                 tasksInScope.forEach(t => {
-                    delete kid.completedTasks[t.id];
+                    if (kid.completedTasks) delete kid.completedTasks[t.id];
                 });
             }
 
@@ -2722,9 +2770,11 @@
         function executeResetDiamonds() {
             openUniversalPinModal('ADMIN_AUTH', {
                 onSuccess: () => {
-                    const kidIndex = parseInt(document.getElementById('reset-kid-select').value);
+                    const kidIdx = parseInt(document.getElementById('reset-kid-select').value);
                     const type = document.getElementById('reset-diamond-type-select').value;
-                    const kid = kidsData[kidIndex];
+                    const kid = kidsData[kidIdx];
+
+                    if (!kid) return;
 
                     if (type === 'today' || type === 'both') {
                         kid.todayDiamonds = 0;
@@ -2746,13 +2796,10 @@
         function resetKidsPasswords() {
             openUniversalPinModal('ADMIN_AUTH', {
                 onSuccess: () => {
-                    kidsData.forEach(kid => {
-                        kid.pin = "1234";
-                    });
+                    kidsData.forEach(kid => { kid.pin = "1234"; });
                     saveData();
-                    populateKidDropdowns();
-                    playSound('chest');
-                    alert("✅ Đã reset PIN của tất cả các bé về 1234!");
+                    renderKidsManageList();
+                    alert("✅ Đã reset mật khẩu PIN của tất cả các bé về 1234!");
                 }
             });
         }
