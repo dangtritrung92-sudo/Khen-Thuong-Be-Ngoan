@@ -1282,10 +1282,15 @@
         let isFirstFirebaseLoad = true; // Tránh lưu đè data ảo trong lần kết nối đầu tiên
 
         try {
-            if (firebaseConfig.databaseURL && typeof firebase !== 'undefined') {
+            // FIX: Tách biệt môi trường Local và Web
+            const isLocal = window.location.protocol === 'file:';
+            
+            if (!isLocal && firebaseConfig.databaseURL && typeof firebase !== 'undefined') {
                 firebase.initializeApp(firebaseConfig);
                 db = firebase.database();
                 isFirebaseActive = true;
+            } else {
+                console.log("Đang mở bằng Local File, hệ thống sẽ dùng bộ nhớ LocalStorage.");
             }
         } catch(e) {
             console.warn("Dùng LocalStorage làm bộ nhớ mặc định.", e);
@@ -1492,8 +1497,8 @@
                         if (kid.lastCheckinDate === undefined) kid.lastCheckinDate = ""; 
                     });
 
-                    // Khắc phục triệt để lỗi ghi đè server từ cache cũ trong lần truy cập đầu
-                    checkAutoReset(isFirstFirebaseLoad);
+                    // FIX LỖI QUA NGÀY MỚI: Bỏ qua skipFirebaseSave để đảm bảo Firebase nhận được lệnh reset khi qua ngày mới
+                    checkAutoReset(false);
                     isFirstFirebaseLoad = false;
                     
                     renderView();
