@@ -1237,6 +1237,17 @@
                 <button class="btn-save" style="width: 100%; background: #C53030;" onclick="resetKidsPasswords()">🔑 Reset PIN Tất Cả Các Bé Về 1234 (Cần Admin PIN)</button>
             </div>
 
+            <!-- CARD 8: SAO LƯU & PHỤC HỒI DỮ LIỆU -->
+            <div class="admin-card" style="border-color:#319795; background:#E6FFFA;">
+                <div class="admin-card-title" style="color:#285E61;">💾 SAO LƯU & KHÔI PHỤC DỮ LIỆU (ADMIN)</div>
+                <p style="font-size: 10px; color: #4A5568; margin-bottom: 6px;">Tải toàn bộ dữ liệu thành 1 gói để lưu trữ, hoặc khôi phục lại khi cần.</p>
+                <div style="display:flex; gap:6px;">
+                    <button class="btn-save" style="flex:1; background:#319795; padding:8px;" onclick="exportBackupData()">⬇️ Tải Gói Dữ Liệu</button>
+                    <button class="btn-save" style="flex:1; background:#D69E2E; padding:8px;" onclick="triggerImportData()">⬆️ Khôi Phục Dữ Liệu</button>
+                    <input type="file" id="import-file-input" style="display:none;" accept=".json" onchange="handleImportData(event)">
+                </div>
+            </div>
+
             <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:10px;">
                 <button class="btn-cancel" style="width:100%; padding:8px; font-size:12px; font-weight:bold;" onclick="closeManageTaskModal()">✖ Đóng Bảng Quản Lý</button>
             </div>
@@ -1279,10 +1290,9 @@
 
         let db = null;
         let isFirebaseActive = false;
-        let isFirstFirebaseLoad = true; // Tránh lưu đè data ảo trong lần kết nối đầu tiên
+        let isFirstFirebaseLoad = true; 
 
         try {
-            // FIX: Tách biệt môi trường Local và Web
             const isLocal = window.location.protocol === 'file:';
             
             if (!isLocal && firebaseConfig.databaseURL && typeof firebase !== 'undefined') {
@@ -1497,7 +1507,6 @@
                         if (kid.lastCheckinDate === undefined) kid.lastCheckinDate = ""; 
                     });
 
-                    // FIX LỖI QUA NGÀY MỚI: Bỏ qua skipFirebaseSave để đảm bảo Firebase nhận được lệnh reset khi qua ngày mới
                     checkAutoReset(false);
                     isFirstFirebaseLoad = false;
                     
@@ -1567,7 +1576,6 @@
             }
         }
 
-        /* ---------------- KHẮC PHỤC TRIỆT ĐỂ: RESET HOẠT ĐỘNG VÀ KIM CƯƠNG KHI QUA NGÀY 0:00 ---------------- */
         function checkAutoReset(skipFirebaseSave = false) {
             if (!kidsData || kidsData.length === 0) return;
 
@@ -1576,7 +1584,6 @@
             const currentSlot = getCurrentSession(now.getHours());
             let isChanged = false;
 
-            // KIỂM TRA ĐỘC LẬP TỪNG BÉ
             kidsData.forEach(kid => {
                 if (!kid.lastCheckinDate || kid.lastCheckinDate !== currentDateStr) {
                     kid.emotion = null;
@@ -1588,23 +1595,19 @@
                 }
             });
 
-            // Đồng bộ vết ngày cho toàn hệ thống
             let systemLastDate = localStorage.getItem('last_system_checkin_date');
             if (!systemLastDate || systemLastDate !== currentDateStr) {
                 localStorage.setItem('last_system_checkin_date', currentDateStr);
                 isChanged = true;
             }
 
-            // Kiểm tra chuyển buổi (Sáng -> Trưa -> Tối)
             if (lastCheckedSlot !== currentSlot) {
                 lastCheckedSlot = currentSlot;
                 isChanged = true;
             }
 
-            // Nếu có sự thay đổi về ngày hoặc buổi
             if (isChanged) {
                 if (skipFirebaseSave) {
-                    // Ngăn ghi đè Firebase khi dữ liệu được load từ cache (tránh ghi đè thiết bị khác)
                     localStorage.setItem('kids_reward_dashboard_v10', JSON.stringify(kidsData));
                 } else {
                     saveData();
@@ -2445,7 +2448,6 @@
             openUniversalPinModal('RESET_SINGLE_TASK');
         }
 
-        /* ---------------- FIX 2: TỐI ƯU HÓA HÌNH ẢNH AVATAR QUÁ NẶNG ---------------- */
         function uploadAvatar(event, kidIndex) {
             const file = event.target.files[0];
             if (!file) return;
@@ -2546,13 +2548,37 @@
                         <img src="${kid.avatar}" style="width:24px; height:24px; border-radius:50%; object-fit:cover;">
                         <b>${kid.name}</b> (PIN: ${kid.pin || '1234'})
                     </div>
-                    <div>
+                    <div style="display:flex; gap:4px; align-items:center;">
+                        <button class="btn-save" title="Chuyển lên" style="padding:2px 6px; font-size:9px; background:#4A5568;" onclick="moveKid(${idx}, -1)">▲</button>
+                        <button class="btn-save" title="Chuyển xuống" style="padding:2px 6px; font-size:9px; background:#4A5568;" onclick="moveKid(${idx}, 1)">▼</button>
                         <button class="btn-save" style="padding:2px 6px; font-size:9px;" onclick="changeKidPin(${idx})">🔑 Đổi PIN</button>
                         <button class="btn-cancel" style="padding:2px 6px; font-size:9px; color:#E53E3E; background:#FFF5F5;" onclick="deleteKid(${idx})">🗑️ Xóa</button>
                     </div>
                 `;
                 kidsList.appendChild(item);
             });
+        }
+
+        // HÀM MỚI: Di chuyển vị trí của bé
+        function moveKid(index, direction) {
+            if (direction === -1 && index === 0) return; // Đã ở đầu
+            if (direction === 1 && index === kidsData.length - 1) return; // Đã ở cuối
+
+            const targetIdx = index + direction;
+            const temp = kidsData[index];
+            kidsData[index] = kidsData[targetIdx];
+            kidsData[targetIdx] = temp;
+
+            // Chỉnh sửa lại index đang chọn nếu bé đang được hiển thị
+            if (selectedKidIndex === index) {
+                selectedKidIndex = targetIdx;
+            } else if (selectedKidIndex === targetIdx) {
+                selectedKidIndex = index;
+            }
+
+            saveData();
+            loadKidsForManagement();
+            renderView();
         }
 
         function loadTasksForManagement() {
@@ -2573,13 +2599,39 @@
                         <span>${task.icon}</span>
                         <span><b>${task.title}</b> (${task.timeSec}s - ${itemIcon}+${task.diamonds})</span>
                     </div>
-                    <div style="display:flex; gap:4px;">
+                    <div style="display:flex; gap:4px; align-items:center;">
+                        <button class="btn-save" title="Chuyển lên" style="padding:2px 6px; font-size:9px; background:#4A5568;" onclick="moveTaskFromAll('${session}', '${task.id}', -1)">▲</button>
+                        <button class="btn-save" title="Chuyển xuống" style="padding:2px 6px; font-size:9px; background:#4A5568;" onclick="moveTaskFromAll('${session}', '${task.id}', 1)">▼</button>
                         <button class="btn-save" style="padding:2px 6px; font-size:9px;" onclick="editTaskInForm('${session}', '${task.id}')">✏️ Sửa</button>
                         <button class="btn-cancel" style="padding:2px 6px; font-size:9px; color:#E53E3E; background:#FFF5F5;" onclick="deleteTaskFromAll('${session}', '${task.id}')">🗑️ Xóa</button>
                     </div>
                 `;
                 container.appendChild(item);
             });
+        }
+
+        // HÀM MỚI: Di chuyển vị trí của nhiệm vụ
+        function moveTaskFromAll(session, taskId, direction) {
+            const refTasks = kidsData[0].tasks[session];
+            const idx = refTasks.findIndex(t => t.id === taskId);
+            
+            if (idx < 0) return;
+            if (direction === -1 && idx === 0) return; // Đã ở đầu
+            if (direction === 1 && idx === refTasks.length - 1) return; // Đã ở cuối
+
+            const targetIdx = idx + direction;
+            
+            kidsData.forEach(kid => {
+                if (kid.tasks && kid.tasks[session]) {
+                    const temp = kid.tasks[session][idx];
+                    kid.tasks[session][idx] = kid.tasks[session][targetIdx];
+                    kid.tasks[session][targetIdx] = temp;
+                }
+            });
+
+            saveData();
+            loadTasksForManagement();
+            renderView();
         }
 
         function saveNewTaskToAll() {
@@ -2836,6 +2888,66 @@
                     alert("✅ Đã Reset Mật Khẩu PIN của tất cả các bé về mặc định là 1234!");
                 }
             });
+        }
+
+        // HÀM MỚI: Tải gói dữ liệu Backup
+        function exportBackupData() {
+            openUniversalPinModal('ADMIN_AUTH', {
+                onSuccess: () => {
+                    const backupData = {
+                        kidsData: kidsData,
+                        systemConfig: { managePassword, resetPassword, adminPassword },
+                        exportDate: new Date().toISOString()
+                    };
+                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData));
+                    const downloadAnchorNode = document.createElement('a');
+                    downloadAnchorNode.setAttribute("href", dataStr);
+                    downloadAnchorNode.setAttribute("download", "DuLieuKhenThuong_" + Date.now() + ".json");
+                    document.body.appendChild(downloadAnchorNode); 
+                    downloadAnchorNode.click();
+                    downloadAnchorNode.remove();
+                    alert("✅ Đã tải xuống file sao lưu dữ liệu thành công!");
+                }
+            });
+        }
+
+        // HÀM MỚI: Khôi phục gói dữ liệu
+        function triggerImportData() {
+            openUniversalPinModal('ADMIN_AUTH', {
+                onSuccess: () => {
+                    document.getElementById('import-file-input').click();
+                }
+            });
+        }
+
+        // HÀM MỚI: Xử lý file import
+        function handleImportData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.kidsData) {
+                        kidsData = data.kidsData;
+                        if (data.systemConfig) {
+                            managePassword = data.systemConfig.managePassword || managePassword;
+                            resetPassword = data.systemConfig.resetPassword || resetPassword;
+                            adminPassword = data.systemConfig.adminPassword || adminPassword;
+                        }
+                        saveData();
+                        alert("✅ Khôi phục dữ liệu thành công! Hệ thống sẽ tự động tải lại.");
+                        location.reload();
+                    } else {
+                        alert("❌ File không đúng định dạng của bảng khen thưởng!");
+                    }
+                } catch(err) {
+                    alert("❌ Đã xảy ra lỗi khi đọc file!");
+                }
+                event.target.value = ''; // Reset input
+            };
+            reader.readAsText(file);
         }
     </script>
 </body>
