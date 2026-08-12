@@ -4,9 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Bảng Khen Thưởng Kim Cương & Trái Tim Cho Bé</title>
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js" async></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    
+    <!-- TỐI ƯU TỐC ĐỘ TẢI: Kết nối trước và tải ngầm (defer) các thư viện -->
+    <link rel="preconnect" href="https://www.gstatic.com">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js" defer></script>
 
     <style>
         :root {
@@ -1250,7 +1254,16 @@
                     }
                 });
             }
-            initData();
+            
+            // Đợi script tải do dùng chế độ defer
+            function checkAndInit() {
+                if (typeof firebase !== 'undefined') {
+                    initData();
+                } else {
+                    setTimeout(checkAndInit, 50);
+                }
+            }
+            checkAndInit();
         });
 
         const firebaseConfig = {
@@ -1266,6 +1279,7 @@
 
         let db = null;
         let isFirebaseActive = false;
+        let isFirstFirebaseLoad = true; // Tránh lưu đè data ảo trong lần kết nối đầu tiên
 
         try {
             if (firebaseConfig.databaseURL && typeof firebase !== 'undefined') {
@@ -1475,10 +1489,13 @@
                         if (kid.diamonds === undefined) kid.diamonds = 0;
                         if (kid.hearts === undefined) kid.hearts = 0;
                         if (kid.lastCollectedItems === undefined) kid.lastCollectedItems = [];
-                        if (kid.lastCheckinDate === undefined) kid.lastCheckinDate = ""; // Biến đồng bộ ngày
+                        if (kid.lastCheckinDate === undefined) kid.lastCheckinDate = ""; 
                     });
 
-                    checkAutoReset();
+                    // Khắc phục triệt để lỗi ghi đè server từ cache cũ trong lần truy cập đầu
+                    checkAutoReset(isFirstFirebaseLoad);
+                    isFirstFirebaseLoad = false;
+                    
                     renderView();
                     renderActiveTimers();
                 });
@@ -1503,10 +1520,10 @@
                     if (kid.diamonds === undefined) kid.diamonds = 0;
                     if (kid.hearts === undefined) kid.hearts = 0;
                     if (kid.lastCollectedItems === undefined) kid.lastCollectedItems = [];
-                    if (kid.lastCheckinDate === undefined) kid.lastCheckinDate = ""; // Biến đồng bộ ngày
+                    if (kid.lastCheckinDate === undefined) kid.lastCheckinDate = ""; 
                 });
                 
-                checkAutoReset();
+                checkAutoReset(false);
                 saveData();
                 renderView();
                 renderActiveTimers();
@@ -1546,8 +1563,7 @@
         }
 
         /* ---------------- KHẮC PHỤC TRIỆT ĐỂ: RESET HOẠT ĐỘNG VÀ KIM CƯƠNG KHI QUA NGÀY 0:00 ---------------- */
-        function checkAutoReset() {
-            // Tránh chạy hàm khi dữ liệu chưa được tải
+        function checkAutoReset(skipFirebaseSave = false) {
             if (!kidsData || kidsData.length === 0) return;
 
             const now = new Date();
@@ -1555,10 +1571,9 @@
             const currentSlot = getCurrentSession(now.getHours());
             let isChanged = false;
 
-            // KIỂM TRA ĐỘC LẬP TỪNG BÉ: Khắc phục triệt để lỗi không reset
+            // KIỂM TRA ĐỘC LẬP TỪNG BÉ
             kidsData.forEach(kid => {
                 if (!kid.lastCheckinDate || kid.lastCheckinDate !== currentDateStr) {
-                    // Đã qua ngày mới -> Reset lại toàn bộ trạng thái trong ngày của bé
                     kid.emotion = null;
                     kid.completedTasks = {};
                     kid.todayDiamonds = 0;
@@ -1581,9 +1596,14 @@
                 isChanged = true;
             }
 
-            // Nếu có sự thay đổi về ngày hoặc buổi, lưu dữ liệu và vẽ lại giao diện
+            // Nếu có sự thay đổi về ngày hoặc buổi
             if (isChanged) {
-                saveData();
+                if (skipFirebaseSave) {
+                    // Ngăn ghi đè Firebase khi dữ liệu được load từ cache (tránh ghi đè thiết bị khác)
+                    localStorage.setItem('kids_reward_dashboard_v10', JSON.stringify(kidsData));
+                } else {
+                    saveData();
+                }
                 renderView();
             }
         }
@@ -1593,7 +1613,14 @@
             document.getElementById('realtime-date').innerText = '📅 ' + now.toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
             document.getElementById('realtime-clock').innerText = now.toLocaleTimeString('vi-VN', { hour12: false });
             checkSessionLockState(now.getHours());
-            checkAutoReset();
+            
+            const currentDateStr = now.toDateString();
+            if (lastCheckedDate && lastCheckedDate !== currentDateStr) {
+                if (kidsData && kidsData.length > 0) {
+                    checkAutoReset(false);
+                }
+            }
+            lastCheckedDate = currentDateStr;
         }
 
         function getCurrentSession(hour) {
@@ -2422,9 +2449,8 @@
             reader.onload = function (e) {
                 const img = new Image();
                 img.onload = function() {
-                    // Dùng Canvas thu nhỏ và nén kích thước ảnh trực tiếp trên trình duyệt
                     const canvas = document.createElement('canvas');
-                    const MAX_SIZE = 150; 
+                    const MAX_SIZE = 300; 
                     let width = img.width;
                     let height = img.height;
 
@@ -2444,8 +2470,7 @@
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
                     
-                    // Xuất ảnh nén JPEG nhẹ 80% (từ vài MB sẽ chỉ còn vài KB)
-                    kidsData[kidIndex].avatar = canvas.toDataURL('image/jpeg', 0.8);
+                    kidsData[kidIndex].avatar = canvas.toDataURL('image/jpeg', 0.9);
                     saveData();
                     renderView();
                 };
