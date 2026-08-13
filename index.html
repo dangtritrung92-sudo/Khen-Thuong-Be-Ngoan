@@ -1479,8 +1479,13 @@
             }
             
             // Lưu local dưới dạng backup ẩn (chỉ dùng khi ấn Load Local)
-            localStorage.setItem('kids_reward_dashboard_v10', JSON.stringify(kidsData));
-            localStorage.setItem('system_config_v10', JSON.stringify({ managePassword, resetPassword, adminPassword }));
+            // THÊM TRY...CATCH để chống lỗi tràn bộ nhớ (QuotaExceededError)
+            try {
+                localStorage.setItem('kids_reward_dashboard_v10', JSON.stringify(kidsData));
+                localStorage.setItem('system_config_v10', JSON.stringify({ managePassword, resetPassword, adminPassword }));
+            } catch (error) {
+                console.warn("⚠️ Dung lượng file quá lớn (vượt quá 5MB). Bỏ qua lưu trữ LocalStorage, tiếp tục đồng bộ Firebase.");
+            }
         }
 
         function checkAutoReset(skipSave = false) {
@@ -2974,12 +2979,15 @@
                             adminPassword = data.systemConfig.adminPassword || adminPassword;
                         }
 
-                        // Lưu vào local
-                        localStorage.setItem('kids_reward_dashboard_v10', JSON.stringify(kidsData));
-                        localStorage.setItem('system_config_v10', JSON.stringify({ managePassword, resetPassword, adminPassword }));
+                        // CHẶN LỖI TRÀN BỘ NHỚ LOCALSTORAGE (QUOTA EXCEEDED)
+                        try {
+                            localStorage.setItem('kids_reward_dashboard_v10', JSON.stringify(kidsData));
+                            localStorage.setItem('system_config_v10', JSON.stringify({ managePassword, resetPassword, adminPassword }));
+                        } catch (quotaError) {
+                            console.warn("⚠️ Bỏ qua lưu LocalStorage vì file vượt quá 5MB. Chỉ đẩy lên Firebase.");
+                        }
 
-                        // Sửa lỗi: Cần đảm bảo dữ liệu Firebase được tải lên hoàn toàn trước khi refresh trang.
-                        // Nếu gọi location.reload() ngay lập tức, kết nối đẩy dữ liệu lên Firebase sẽ bị ngắt giữa chừng.
+                        // Đẩy lên Firebase an toàn
                         if (navigator.onLine && isFirebaseActive && db) {
                             Promise.all([
                                 db.ref('kidsData').set(kidsData),
