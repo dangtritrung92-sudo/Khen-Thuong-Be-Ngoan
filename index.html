@@ -1244,7 +1244,8 @@
                 <div style="display:flex; gap:6px;">
                     <button class="btn-save" style="flex:1; background:#319795; padding:8px;" onclick="exportBackupData()">⬇️ Tải Gói Dữ Liệu</button>
                     <button class="btn-save" style="flex:1; background:#D69E2E; padding:8px;" onclick="triggerImportData()">⬆️ Khôi Phục Dữ Liệu</button>
-                    <input type="file" id="import-file-input" style="display:none;" accept=".json" onchange="handleImportData(event)">
+                    <!-- ĐÃ SỬA LỖI TẠI ĐÂY: Thêm accept nhiều định dạng để tương thích Tablet Android -->
+                    <input type="file" id="import-file-input" style="display:none;" accept=".json,application/json,text/plain,*/*" onchange="handleImportData(event)">
                 </div>
             </div>
 
@@ -1255,28 +1256,6 @@
     </div>
 
     <script>
-        document.addEventListener("DOMContentLoaded", function () {
-            const pinInput = document.getElementById("pin-input");
-            if (pinInput) {
-                pinInput.addEventListener("keydown", function (e) {
-                    if (e.key === "Enter") {
-                        e.preventDefault();
-                        submitUniversalPin();
-                    }
-                });
-            }
-            
-            // Đợi script tải do dùng chế độ defer
-            function checkAndInit() {
-                if (typeof firebase !== 'undefined') {
-                    initData();
-                } else {
-                    setTimeout(checkAndInit, 50);
-                }
-            }
-            checkAndInit();
-        });
-
         const firebaseConfig = {
             apiKey: "AIzaSyAmnRqtKXXtDA2jZthHJ9XcNws5oQI4ND0",
             authDomain: "nguyennam2120.firebaseapp.com",
@@ -1292,21 +1271,6 @@
         let isFirebaseActive = false;
         let isFirstFirebaseLoad = true; 
 
-        try {
-            // Tách biệt môi trường Local (kể cả mở bằng Live Server) và Web
-            const isLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-            
-            if (!isLocal && firebaseConfig.databaseURL && typeof firebase !== 'undefined') {
-                firebase.initializeApp(firebaseConfig);
-                db = firebase.database();
-                isFirebaseActive = true;
-            } else {
-                console.log("Đang mở bằng Local, hệ thống sẽ dùng bộ nhớ LocalStorage.");
-            }
-        } catch(e) {
-            console.warn("Dùng LocalStorage làm bộ nhớ mặc định.", e);
-        }
-
         let bgmEnabled = false; 
         let audioCtx = null;
         let bgMusicTimer = null;
@@ -1321,6 +1285,45 @@
         let pendingResetTaskId = null;
         let pendingTaskActionParams = null;
         let adminSuccessCallback = null;
+
+        document.addEventListener("DOMContentLoaded", function () {
+            const pinInput = document.getElementById("pin-input");
+            if (pinInput) {
+                pinInput.addEventListener("keydown", function (e) {
+                    if (e.key === "Enter") {
+                        e.preventDefault();
+                        submitUniversalPin();
+                    }
+                });
+            }
+            
+            // Đợi script tải do dùng chế độ defer
+            function checkAndInit() {
+                if (typeof firebase !== 'undefined') {
+                    // ĐÃ SỬA LỖI TẠI ĐÂY: Dời khối khởi tạo Firebase vào trong hàm chờ để nó nhận diện chính xác kể cả khi tải ngầm
+                    try {
+                        const isLocal = window.location.protocol === 'file:';
+                        
+                        if (!isLocal && firebaseConfig.databaseURL) {
+                            if (!firebase.apps.length) {
+                                firebase.initializeApp(firebaseConfig);
+                            }
+                            db = firebase.database();
+                            isFirebaseActive = true;
+                        } else {
+                            console.log("Đang mở bằng Local File, hệ thống sẽ dùng bộ nhớ LocalStorage.");
+                        }
+                    } catch(e) {
+                        console.warn("Dùng LocalStorage làm bộ nhớ mặc định.", e);
+                    }
+                    
+                    initData();
+                } else {
+                    setTimeout(checkAndInit, 50);
+                }
+            }
+            checkAndInit();
+        });
 
         function getAudioContext() {
             if (!audioCtx) {
@@ -2903,7 +2906,7 @@
                     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData));
                     
                     // Logic đặt tên file mới
-                    const envStr = isFirebaseActive ? 'Online' : 'Local';
+                    const envStr = (window.location.protocol === 'file:') ? 'Local' : 'Online';
                     const d = new Date();
                     const dateStr = String(d.getDate()).padStart(2, '0') + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + d.getFullYear();
                     const fileName = `DuLieuKhenThuong-${envStr}-${dateStr}.json`;
