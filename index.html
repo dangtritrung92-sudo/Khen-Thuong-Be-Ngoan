@@ -1246,6 +1246,9 @@
                     <button class="btn-save" style="flex:1; background:#D69E2E; padding:8px;" onclick="triggerImportData()">⬆️ Khôi Phục Dữ Liệu</button>
                     <input type="file" id="import-file-input" style="display:none;" accept=".json" onchange="handleImportData(event)">
                 </div>
+                <div style="display:flex; gap:6px; margin-top:6px;">
+                    <button class="btn-save" style="flex:1; background:#4A5568; padding:8px;" onclick="forceLoadLocalData()">📂 Tải Data Local (Chỉ khi cần)</button>
+                </div>
             </div>
 
             <div style="display:flex; justify-content:flex-end; gap:6px; margin-top:10px;">
@@ -1266,10 +1269,10 @@
                 });
             }
             
-            // TẢI VÀ RENDER NGAY TỪ LOCALSTORAGE ĐỂ ĐẠT TỐC ĐỘ < 2S
-            initLocalDataAndRender();
+            // Khởi tạo state rỗng, UI mặc định để đạt tốc độ < 2s
+            renderView();
             
-            // KIỂM TRA VÀ KẾT NỐI FIREBASE CHẠY NGẦM
+            // Chỉ load, cập nhật và đồng bộ từ Firebase
             checkAndInitFirebase();
         });
 
@@ -1354,40 +1357,7 @@
         let lastCheckedSlot = '';
         let lastCheckedDate = '';
 
-        // LOAD LOCAL CHỚP NHOÁNG DƯỚI 2S
-        function initLocalDataAndRender() {
-            const savedCfg = localStorage.getItem('system_config_v10');
-            if (savedCfg) {
-                try {
-                    const cfg = JSON.parse(savedCfg);
-                    if (cfg.managePassword) managePassword = cfg.managePassword;
-                    if (cfg.resetPassword) resetPassword = cfg.resetPassword;
-                    if (cfg.adminPassword) adminPassword = cfg.adminPassword;
-                } catch(e) {}
-            }
-
-            const saved = localStorage.getItem('kids_reward_dashboard_v10');
-            if (saved) {
-                try { 
-                    kidsData = JSON.parse(saved); 
-                } catch(e) { 
-                    kidsData = getDefaultKids(); 
-                }
-            } else {
-                kidsData = getDefaultKids();
-            }
-
-            validateKidsData();
-            checkAutoReset(false);
-            
-            renderView();
-            renderActiveTimers();
-
-            setInterval(updateRealtimeClock, 1000);
-            updateRealtimeClock();
-        }
-
-        // KẾT NỐI FIREBASE CHẠY NGẦM
+        // KẾT NỐI VÀ LOAD DỮ LIỆU TỪ FIREBASE
         function checkAndInitFirebase() {
             if (typeof firebase !== 'undefined') {
                 try {
@@ -1403,7 +1373,6 @@
                             if (cfg.managePassword) managePassword = cfg.managePassword;
                             if (cfg.resetPassword) resetPassword = cfg.resetPassword;
                             if (cfg.adminPassword) adminPassword = cfg.adminPassword;
-                            localStorage.setItem('system_config_v10', JSON.stringify({ managePassword, resetPassword, adminPassword }));
                         }
                     });
 
@@ -1413,23 +1382,59 @@
                             kidsData = Array.isArray(data) ? data : Object.values(data);
                             validateKidsData();
                             checkAutoReset(true);
-                            localStorage.setItem('kids_reward_dashboard_v10', JSON.stringify(kidsData));
                             renderView();
+                            renderActiveTimers();
                         } else {
-                            if (kidsData && kidsData.length > 0) {
-                                db.ref('kidsData').set(kidsData);
-                                db.ref('systemConfig').set({ managePassword, resetPassword, adminPassword });
+                            if (kidsData.length === 0) {
+                                kidsData = getDefaultKids();
                             }
+                            db.ref('kidsData').set(kidsData);
+                            db.ref('systemConfig').set({ managePassword, resetPassword, adminPassword });
+                            renderView();
                         }
                     });
+
+                    setInterval(updateRealtimeClock, 1000);
+                    updateRealtimeClock();
+
                 } catch(e) {
-                    console.warn("Dùng LocalStorage làm bộ nhớ mặc định vì chưa kết nối được Firebase.", e);
+                    console.error("Lỗi khởi tạo Firebase:", e);
                 }
             } else {
                 if (navigator.onLine) {
                     setTimeout(checkAndInitFirebase, 50);
                 }
             }
+        }
+
+        function forceLoadLocalData() {
+            openUniversalPinModal('ADMIN_AUTH', {
+                onSuccess: () => {
+                    const saved = localStorage.getItem('kids_reward_dashboard_v10');
+                    const savedCfg = localStorage.getItem('system_config_v10');
+                    
+                    if (saved) {
+                        try {
+                            kidsData = JSON.parse(saved);
+                            validateKidsData();
+                            if (savedCfg) {
+                                const cfg = JSON.parse(savedCfg);
+                                if (cfg.managePassword) managePassword = cfg.managePassword;
+                                if (cfg.resetPassword) resetPassword = cfg.resetPassword;
+                                if (cfg.adminPassword) adminPassword = cfg.adminPassword;
+                            }
+                            saveData(); // Push to Firebase
+                            renderView();
+                            renderActiveTimers();
+                            alert("✅ Đã load và đồng bộ dữ liệu Local lên Firebase thành công!");
+                        } catch (e) {
+                            alert("❌ Lỗi khi đọc dữ liệu Local!");
+                        }
+                    } else {
+                        alert("⚠️ Không tìm thấy dữ liệu Local nào được lưu!");
+                    }
+                }
+            });
         }
 
         // KIỂM TRA ĐẦY ĐỦ THÔNG TIN BÉ, KIM CƯƠNG, HOẠT ĐỘNG
@@ -1467,15 +1472,15 @@
         }
 
         function saveData() {
-            // Luôn lưu local dự phòng, đảm bảo toàn bộ dữ liệu (cả password) được duy trì khi rớt mạng
-            localStorage.setItem('kids_reward_dashboard_v10', JSON.stringify(kidsData));
-            localStorage.setItem('system_config_v10', JSON.stringify({ managePassword, resetPassword, adminPassword }));
-            
-            // Cập nhật Firebase ngay nếu có mạng và db đã sẵn sàng
+            // Chỉ đồng bộ lên Firebase là chính
             if (navigator.onLine && isFirebaseActive && db) {
                 db.ref('kidsData').set(kidsData);
                 db.ref('systemConfig').set({ managePassword, resetPassword, adminPassword });
             }
+            
+            // Lưu local dưới dạng backup ẩn (chỉ dùng khi ấn Load Local)
+            localStorage.setItem('kids_reward_dashboard_v10', JSON.stringify(kidsData));
+            localStorage.setItem('system_config_v10', JSON.stringify({ managePassword, resetPassword, adminPassword }));
         }
 
         function checkAutoReset(skipSave = false) {
@@ -1509,9 +1514,7 @@
             }
 
             if (isChanged) {
-                if (skipSave) {
-                    localStorage.setItem('kids_reward_dashboard_v10', JSON.stringify(kidsData));
-                } else {
+                if (!skipSave) {
                     saveData();
                 }
                 renderView();
@@ -2892,7 +2895,7 @@
             });
         }
 
-        // HÀM MỚI: Tải gói dữ liệu Backup
+        // HÀM MỚI ĐÃ SỬA LỖI: Tải gói dữ liệu Backup an toàn bằng Blob
         function exportBackupData() {
             openUniversalPinModal('ADMIN_AUTH', {
                 onSuccess: () => {
@@ -2901,7 +2904,11 @@
                         systemConfig: { managePassword, resetPassword, adminPassword },
                         exportDate: new Date().toISOString()
                     };
-                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData));
+                    
+                    // Sửa lỗi: Sử dụng Blob thay vì data URI để tránh lỗi giới hạn ký tự và mã hóa sai
+                    const jsonString = JSON.stringify(backupData);
+                    const blob = new Blob([jsonString], { type: "application/json" });
+                    const url = URL.createObjectURL(blob);
                     
                     // Logic đặt tên file mới
                     const envStr = (window.location.protocol === 'file:') ? 'Local' : 'Online';
@@ -2910,11 +2917,13 @@
                     const fileName = `DuLieuKhenThuong-${envStr}-${dateStr}.json`;
 
                     const downloadAnchorNode = document.createElement('a');
-                    downloadAnchorNode.setAttribute("href", dataStr);
+                    downloadAnchorNode.setAttribute("href", url);
                     downloadAnchorNode.setAttribute("download", fileName);
                     document.body.appendChild(downloadAnchorNode); 
                     downloadAnchorNode.click();
                     downloadAnchorNode.remove();
+                    URL.revokeObjectURL(url); // Giải phóng bộ nhớ sau khi tải xong
+
                     alert("✅ Đã tải xuống file sao lưu dữ liệu thành công!");
                 }
             });
@@ -2929,7 +2938,7 @@
             });
         }
 
-        // HÀM MỚI: Xử lý file import
+        // HÀM MỚI ĐÃ SỬA LỖI: Xử lý file import (Bao gồm cơ chế gỡ mã lỗi)
         function handleImportData(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -2937,8 +2946,17 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 try {
-                    const data = JSON.parse(e.target.result);
-                    if (data.kidsData) {
+                    let fileContent = e.target.result;
+                    let data;
+                    
+                    // Sửa lỗi: Thử parse JSON, nếu do bản cũ bị mã hóa URL thì decode rồi parse lại
+                    try {
+                        data = JSON.parse(fileContent);
+                    } catch (parseError) {
+                        data = JSON.parse(decodeURIComponent(fileContent));
+                    }
+
+                    if (data && data.kidsData) {
                         kidsData = data.kidsData;
                         if (data.systemConfig) {
                             managePassword = data.systemConfig.managePassword || managePassword;
@@ -2952,7 +2970,8 @@
                         alert("❌ File không đúng định dạng của bảng khen thưởng!");
                     }
                 } catch(err) {
-                    alert("❌ Đã xảy ra lỗi khi đọc file!");
+                    console.error(err);
+                    alert("❌ Đã xảy ra lỗi khi đọc file! File có thể bị hỏng hoặc không đúng định dạng.");
                 }
                 event.target.value = ''; // Reset input
             };
