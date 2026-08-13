@@ -1293,14 +1293,15 @@
         let isFirstFirebaseLoad = true; 
 
         try {
-            const isLocal = window.location.protocol === 'file:';
+            // Tách biệt môi trường Local (kể cả mở bằng Live Server) và Web
+            const isLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
             
             if (!isLocal && firebaseConfig.databaseURL && typeof firebase !== 'undefined') {
                 firebase.initializeApp(firebaseConfig);
                 db = firebase.database();
                 isFirebaseActive = true;
             } else {
-                console.log("Đang mở bằng Local File, hệ thống sẽ dùng bộ nhớ LocalStorage.");
+                console.log("Đang mở bằng Local, hệ thống sẽ dùng bộ nhớ LocalStorage.");
             }
         } catch(e) {
             console.warn("Dùng LocalStorage làm bộ nhớ mặc định.", e);
@@ -2900,9 +2901,16 @@
                         exportDate: new Date().toISOString()
                     };
                     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData));
+                    
+                    // Logic đặt tên file mới
+                    const envStr = isFirebaseActive ? 'Online' : 'Local';
+                    const d = new Date();
+                    const dateStr = String(d.getDate()).padStart(2, '0') + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + d.getFullYear();
+                    const fileName = `DuLieuKhenThuong-${envStr}-${dateStr}.json`;
+
                     const downloadAnchorNode = document.createElement('a');
                     downloadAnchorNode.setAttribute("href", dataStr);
-                    downloadAnchorNode.setAttribute("download", "DuLieuKhenThuong_" + Date.now() + ".json");
+                    downloadAnchorNode.setAttribute("download", fileName);
                     document.body.appendChild(downloadAnchorNode); 
                     downloadAnchorNode.click();
                     downloadAnchorNode.remove();
