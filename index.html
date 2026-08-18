@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Bảng Khen Thưởng Kim Cương & Trái Tim Cho Bé</title>
     
-    <!-- TỐI ƯU TỐC ĐỘ TẢI: Kết nối trước và tải không đồng bộ (async/defer) để không chặn giao diện -->
     <link rel="preconnect" href="https://www.gstatic.com">
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js" defer></script>
@@ -369,17 +368,8 @@
         .session-accordion::-webkit-scrollbar-track { background: #F1F5F9; border-radius: 8px; }
         .session-accordion::-webkit-scrollbar-thumb { background: #FF6B81; border-radius: 8px; }
 
-        .session-card { background: #FAFAFA; border-radius: 14px; overflow: hidden; border: 1.5px solid #E2E8F0; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+        .session-card { background: #FAFAFA; border-radius: 14px; overflow: hidden; border: 1.5px solid #E2E8F0; display: flex; flex-direction: column; flex: 1; min-height: 0; transition: all 0.3s ease; }
         
-        .session-card.time-locked { 
-            border-color: #CBD5E0 !important; 
-            background: #EDF2F7 !important; 
-            opacity: 0.7;
-            filter: grayscale(35%);
-        }
-        .session-card.time-locked .task-card { background: #E2E8F0 !important; pointer-events: none; }
-        .session-card.time-locked .btn-start-task { background: #A0AEC0 !important; cursor: not-allowed; }
-
         .session-header-btn {
             width: 100%; padding: 8px 12px; border: none; display: flex; justify-content: space-between; align-items: center;
             font-size: 13px; font-weight: 900; cursor: pointer; text-align: left; flex-shrink: 0;
@@ -670,10 +660,15 @@
             background: linear-gradient(135deg, #FFF5F7 0%, #EBF8FF 100%);
             border: 1.5px solid #FF6B81; border-radius: 14px; padding: 6px; text-align: center;
             display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; flex-shrink: 0;
-            margin-top: 4px; width: 100%;
+            margin-top: 6px; width: 100%;
+            transition: all 0.2s;
         }
-        .interactive-game-icon { font-size: 28px; cursor: pointer; user-select: none; }
-        .game-close-btn { background: #E53E3E; color: white; border: none; padding: 2px 8px; border-radius: 6px; font-size: 9px; font-weight: bold; cursor: pointer; }
+        .in-column-game-box:hover {
+            box-shadow: 0 4px 12px rgba(255, 107, 129, 0.2);
+            transform: translateY(-2px);
+        }
+        .interactive-game-icon { font-size: 32px; cursor: pointer; user-select: none; transition: transform 0.1s; }
+        .interactive-game-icon:active { transform: scale(0.8); }
 
         /* ---------------- BỘ ĐẾM GIỜ & POPUP ---------------- */
         .sticky-timer-overlay-box {
@@ -997,19 +992,15 @@
         </div>
     </div>
 
-    <!-- MÀN HÌNH 1: CHỌN BÉ -->
     <div class="selection-screen" id="selection-screen">
         <div class="selection-title">👶 BÉ NÀO SẼ THỰC HIỆN HÔM NAY?</div>
         <div class="kids-select-grid" id="kids-select-grid"></div>
     </div>
 
-    <!-- BỘ ĐẾM GIỜ NỔI -->
     <div id="active-timers-container"></div>
 
-    <!-- MÀN HÌNH 2: BẢNG HOẠT ĐỘNG KHEN THƯỜNG -->
     <div class="kids-dashboard-grid" id="kids-dashboard-grid" style="display: none;"></div>
 
-    <!-- MODAL BÀN PHÍM PIN DÙNG CHUNG -->
     <div class="pin-modal-overlay" id="pin-modal">
         <div class="pin-modal-card">
             <img src="" id="pin-kid-avatar" class="pin-kid-avatar" alt="Avatar" style="display:none;">
@@ -1037,7 +1028,6 @@
         </div>
     </div>
 
-    <!-- MODAL MÀN HÌNH ĐỔI QUÀ DỄ THƯƠNG -->
     <div class="exchange-modal-overlay" id="exchange-modal">
         <div class="gift-success-card">
             <div style="font-size:60px; animation: bounce 1s infinite alternate;">🎁✨</div>
@@ -1055,7 +1045,6 @@
         </div>
     </div>
 
-    <!-- MODAL THƯỞNG KHI HOÀN THÀNH TASK -->
     <div class="reward-modal-overlay" id="reward-modal">
         <div class="reward-chest-icon" id="reward-chest-btn" onclick="playSound('chest')">🎁</div>
         <div class="reward-title">XUẤT SẮC QUÁ!</div>
@@ -1064,7 +1053,6 @@
         <button class="btn-claim-reward" onclick="closeRewardModal()">NHẬN QUÀ & BẮT ĐẦU MỚI 🌟</button>
     </div>
 
-    <!-- MODAL GIỮ 5 GIÂY -->
     <div class="hold-modal-overlay" id="hold-modal">
         <div class="hold-modal-body">
             <h3 style="font-size: 13px; color: #2D3748; margin-bottom: 2px;">🔒 Chưa tới giờ hoạt động!</h3>
@@ -1077,7 +1065,6 @@
         </div>
     </div>
 
-    <!-- MODAL QUẢN LÝ DÀNH CHO BA MẸ -->
     <div class="modal-overlay" id="add-task-modal">
         <div class="modal-body">
             <div class="modal-header-container">
@@ -1085,7 +1072,6 @@
                 <button class="close-modal-x-btn" onclick="closeManageTaskModal()">✖</button>
             </div>
 
-            <!-- CARD 1: CÀI ĐẶT MẬT KHẨU -->
             <div class="admin-card pwd">
                 <div class="admin-card-title">🔐 CÀI ĐẶT MẬT KHẨU HỆ THỐNG</div>
                 <div style="display:flex; flex-direction:column; gap:6px;">
@@ -1097,7 +1083,6 @@
                 </div>
             </div>
 
-            <!-- CARD 2: THƯỞNG NÓNG KIM CƯƠNG & TRÁI TIM -->
             <div class="admin-card bonus">
                 <div class="admin-card-title">💎/❤️ THƯỞNG / TRỪ VẬT PHẨM TRỰC TIẾP</div>
                 <div class="form-group">
@@ -1131,7 +1116,6 @@
                 <button class="btn-save" style="width: 100%; background: #0284C7; font-size: 11px; padding: 8px;" onclick="executeAdjustDiamonds()">✨ Thực Hiện Thưởng / Trừ</button>
             </div>
             
-            <!-- CARD 3: CHỈNH SỬA & XÓA NHIỆM VỤ CÓ SẴN -->
             <div class="admin-card edit-tasks">
                 <div class="admin-card-title">📝 DANH SÁCH NHIỆM VỤ (ĐỒNG BỘ TẤT CẢ)</div>
                 <div class="form-group">
@@ -1145,7 +1129,6 @@
                 <div id="existing-tasks-manage-list" style="max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin-top: 4px;"></div>
             </div>
 
-            <!-- CARD 4: THÊM / SỬA NHIỆM VỤ MỚI -->
             <div class="admin-card add-task">
                 <div class="admin-card-title" id="form-task-action-title">➕ THÊM NHIỆM VỤ MỚI CHO TẤT CẢ BÉ</div>
                 <input type="hidden" id="edit-task-id-hidden" value="">
@@ -1193,14 +1176,12 @@
                 </div>
             </div>
 
-            <!-- CARD 5: DANH SÁCH BÉ & PIN CÁ NHÂN -->
             <div class="admin-card kids">
                 <div class="admin-card-title">👶 DANH SÁCH BÉ & MẬT KHẨU BÉ</div>
                 <div id="kids-manage-list"></div>
                 <button class="btn-save" style="width: 100%; margin-top: 6px; background: #3182CE;" onclick="addNewKid()">➕ Thêm Bé Mới (Cần Mật Khẩu Admin)</button>
             </div>
 
-            <!-- CARD 6: RESET HOẠT ĐỘNG (CHECK-IN) -->
             <div class="admin-card reset-tasks">
                 <div class="admin-card-title">🔄 RESET LẠI TRẠNG THÁI NHIỆM VỤ</div>
                 <div class="form-group">
@@ -1219,7 +1200,6 @@
                 <button class="btn-save" style="width: 100%; background:#38A169; padding:8px;" onclick="promptResetTasksByPasscode()">Thực Hiện Reset Task</button>
             </div>
 
-            <!-- CARD 7: RESET KIM CƯƠNG/TRÁI TIM & MẬT KHẨU BÉ -->
             <div class="admin-card reset-diamonds">
                 <div class="admin-card-title">🚨 TÙY CHỌN KHÔI PHỤC & KHÓA (QUYỀN ADMIN)</div>
                 <div class="form-group">
@@ -1237,7 +1217,6 @@
                 <button class="btn-save" style="width: 100%; background: #C53030;" onclick="resetKidsPasswords()">🔑 Reset PIN Tất Cả Các Bé Về 1234 (Cần Admin PIN)</button>
             </div>
 
-            <!-- CARD 8: SAO LƯU & PHỤC HỒI DỮ LIỆU -->
             <div class="admin-card" style="border-color:#319795; background:#E6FFFA;">
                 <div class="admin-card-title" style="color:#285E61;">💾 SAO LƯU & KHÔI PHỤC DỮ LIỆU (ADMIN)</div>
                 <p style="font-size: 10px; color: #4A5568; margin-bottom: 6px;">Tải toàn bộ dữ liệu thành 1 gói để lưu trữ, hoặc khôi phục lại khi cần.</p>
@@ -1247,7 +1226,7 @@
                     <input type="file" id="import-file-input" style="display:none;" accept=".json" onchange="handleImportData(event)">
                 </div>
                 <div style="display:flex; gap:6px; margin-top:6px;">
-                    <button class="btn-save" style="flex:1; background:#4A5568; padding:8px;" onclick="forceLoadLocalData()">📂 Tải Data Local (Chỉ khi cần)</button>
+                    <button class="btn-save" style="flex:1; background:#4A5568; padding:8px;" onclick="forceLoadLocalData()">📂 Tải Data Local (Cũ)</button>
                 </div>
             </div>
 
@@ -1269,14 +1248,9 @@
                 });
             }
             
-            // Khởi tạo state rỗng, UI mặc định để đạt tốc độ < 2s
             renderView();
-            
-            // Khởi tạo hiển thị đồng hồ thời gian thực
             setInterval(updateRealtimeClock, 1000);
             updateRealtimeClock();
-
-            // Kiểm tra và chờ nạp Firebase an toàn (khắc phục trệch nhịp khi mở lần đầu)
             waitForFirebaseAndInit();
         });
 
@@ -1361,7 +1335,6 @@
         let lastCheckedSlot = '';
         let lastCheckedDate = '';
 
-        // HÀM ĐỜI THƯ VIỆN FIREBASE NẠP XONG (FIX LỖI KHI MỞ TRANG LẦN ĐẦU)
         function waitForFirebaseAndInit(retries = 0) {
             if (typeof firebase !== 'undefined') {
                 checkAndInitFirebase();
@@ -1370,13 +1343,13 @@
                     waitForFirebaseAndInit(retries + 1);
                 }, 50);
             } else {
-                console.warn("Không thể tải thư viện Firebase. Sử dụng dữ liệu lưu tại máy.");
+                alert("❌ Lỗi nghiêm trọng: Không thể kết nối thư viện Firebase để lưu trữ.\n\nPhương án: Vui lòng kiểm tra lại mạng kết nối hoặc tường lửa. Dữ liệu sẽ chạy tạm với bản nháp và KHÔNG ĐƯỢC LƯU LẠI.");
+                isFirebaseActive = false;
                 kidsData = getDefaultKids();
                 renderView();
             }
         }
 
-        // KẾT NỐI VÀ LOAD DỮ LIỆU TỪ FIREBASE
         function checkAndInitFirebase() {
             if (typeof firebase !== 'undefined') {
                 try {
@@ -1438,18 +1411,17 @@
                             saveData(); // Push to Firebase
                             renderView();
                             renderActiveTimers();
-                            alert("✅ Đã load và đồng bộ dữ liệu Local lên Firebase thành công!");
+                            alert("✅ Đã load dữ liệu Local cũ và đồng bộ thành công lên Firebase!");
                         } catch (e) {
                             alert("❌ Lỗi khi đọc dữ liệu Local!");
                         }
                     } else {
-                        alert("⚠️ Không tìm thấy dữ liệu Local nào được lưu!");
+                        alert("⚠️ Không tìm thấy dữ liệu Local cũ nào.");
                     }
                 }
             });
         }
 
-        // KIỂM TRA ĐẦY ĐỦ THÔNG TIN BÉ, KIM CƯƠNG, HOẠT ĐỘNG
         function validateKidsData() {
             kidsData.forEach(kid => {
                 if (!kid.pin) kid.pin = "1234";
@@ -1484,19 +1456,13 @@
         }
 
         function saveData() {
-            // Chỉ đồng bộ lên Firebase là chính
             if (navigator.onLine && isFirebaseActive && db) {
-                db.ref('kidsData').set(kidsData);
-                db.ref('systemConfig').set({ managePassword, resetPassword, adminPassword });
-            }
-            
-            // Lưu local dưới dạng backup ẩn (chỉ dùng khi ấn Load Local)
-            // THÊM TRY...CATCH để chống lỗi tràn bộ nhớ (QuotaExceededError)
-            try {
-                localStorage.setItem('kids_reward_dashboard_v10', JSON.stringify(kidsData));
-                localStorage.setItem('system_config_v10', JSON.stringify({ managePassword, resetPassword, adminPassword }));
-            } catch (error) {
-                console.warn("⚠️ Dung lượng file quá lớn (vượt quá 5MB). Bỏ qua lưu trữ LocalStorage, tiếp tục đồng bộ Firebase.");
+                db.ref('kidsData').set(kidsData).catch((error) => {
+                    alert("❌ Lỗi đồng bộ Firebase: " + error.message + "\n\nPhương án: Vui lòng kiểm tra lại mạng Internet.");
+                });
+                db.ref('systemConfig').set({ managePassword, resetPassword, adminPassword }).catch(()=>{});
+            } else {
+                alert("⚠️ Hệ thống đang mất kết nối Internet hoặc Firebase không khả dụng!\n\nDữ liệu của các bé hiện tại chưa được lưu đồng bộ. Hãy bật lại mạng để máy chủ cập nhật thông vị.");
             }
         }
 
@@ -1611,7 +1577,8 @@
                     osc.type = 'triangle'; 
                     osc.frequency.setValueAtTime(melody[noteIndex], now);
                     gain.gain.setValueAtTime(0.001, now);
-                    gain.gain.linearRampToValueAtTime(0.05, now + 0.04);
+                    // CHỈNH SỬA TẠI ĐÂY: Tăng gain từ 0.05 lên 0.90 để đạt 90% âm lượng tối đa
+                    gain.gain.linearRampToValueAtTime(0.90, now + 0.04);
                     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
                     osc.connect(gain); gain.connect(ctx.destination);
                     osc.start(now); osc.stop(now + 0.45);
@@ -1663,13 +1630,16 @@
             return 'evening';
         }
 
+        // TỐI ƯU: Chỉ hiển thị duy nhất hoạt động của buổi trong khung giờ hiện tại
         function checkSessionLockState(currentHour) {
             const activeSession = getCurrentSession(currentHour);
             document.querySelectorAll('.session-card').forEach(card => {
                 if (card.dataset.session !== activeSession) {
-                    card.classList.add('time-locked');
+                    card.style.display = 'none'; // Ẩn hoàn toàn các buổi khác
                 } else {
-                    card.classList.remove('time-locked');
+                    card.style.display = 'flex'; // Chỉ hiện buổi hiện tại
+                    const content = card.querySelector('.session-content');
+                    if (content) content.classList.add('open');
                 }
             });
         }
@@ -1730,6 +1700,30 @@
                     }, 1500);
                 }, i * 180);
             }
+        }
+
+        // TÍNH NĂNG MỚI: Game đập bong bóng pháo hoa
+        function playFireworkGame(kidIndex, el) {
+            playSound('pop');
+            el.innerText = '💥';
+            
+            if (typeof confetti === 'function') {
+                const rect = el.getBoundingClientRect();
+                const x = (rect.left + rect.width / 2) / window.innerWidth;
+                const y = (rect.top + rect.height / 2) / window.innerHeight;
+                
+                confetti({
+                    particleCount: 40,
+                    spread: 60,
+                    origin: { x, y },
+                    colors: ['#FF4757', '#FFD166', '#00F0FF', '#38A169', '#E9D8FD']
+                });
+            }
+            
+            setTimeout(() => {
+                const icons = ['🎈', '🎆', '✨', '🎁', '🎊', '🚀'];
+                el.innerText = icons[Math.floor(Math.random() * icons.length)];
+            }, 400);
         }
 
         function openUniversalPinModal(mode, options = {}) {
@@ -2022,9 +2016,6 @@
             const kid = kidsData[kidIndex];
             const activeSession = getCurrentSession(new Date().getHours());
 
-            const card = document.createElement('div');
-            card.className = 'kid-column-card';
-
             const totalItems = (kid.diamonds || 0) + (kid.hearts || 0);
             const fillHeight = Math.min(100, Math.max(12, (totalItems / 2500) * 100));
             const gemsCount = Math.min(Math.floor(totalItems / 100), 16);
@@ -2072,6 +2063,11 @@
                                 <div class="mood-question-box">
                                     <span>Muốn đổi cảm xúc?</span>
                                     <button class="btn-switch-mood" onclick="resetEmotion(${kidIndex})">Đổi lại</button>
+                                </div>
+                                
+                                <div class="in-column-game-box">
+                                    <div style="font-size:10px; font-weight:bold; color:#FF4757;">🎈 Chạm Bóng - Bắn Pháo Hoa 🎆</div>
+                                    <div class="interactive-game-icon" id="mini-game-icon-${kidIndex}" onclick="playFireworkGame(${kidIndex}, this)">🎈</div>
                                 </div>
                             ` : `
                                 <div class="emotion-grid">
@@ -2132,21 +2128,27 @@
                 </div>
             `;
 
+            // Đoạn này đã được fix: Tạo div card và thêm class chuẩn xác
+            const card = document.createElement('div');
+            card.className = 'kid-column-card';
             card.innerHTML = html;
             grid.appendChild(card);
         }
 
-        function renderSessionCard(kidIndex, kid, sessionId, sessionTitle, sessionClass, isOpenDefault) {
+        // TỐI ƯU 1: Ẩn hoàn toàn nếu không phải buổi hiện tại
+        function renderSessionCard(kidIndex, kid, sessionId, sessionTitle, sessionClass, isActiveSession) {
             const tasks = (kid.tasks && kid.tasks[sessionId]) ? kid.tasks[sessionId] : (DEFAULT_TASKS[sessionId] || []);
             const completedCount = tasks.filter(t => kid.completedTasks && kid.completedTasks[t.id]).length;
             
+            const displayStyle = isActiveSession ? 'display: flex;' : 'display: none;';
+
             return `
-                <div class="session-card" data-session="${sessionId}">
+                <div class="session-card" data-session="${sessionId}" style="${displayStyle}">
                     <button class="session-header-btn ${sessionClass}" onclick="toggleSessionAccordion(this)">
                         <span>${sessionTitle}</span>
                         <span style="font-size:11px; background:rgba(0,0,0,0.1); padding:2px 6px; border-radius:8px;">${completedCount}/${tasks.length}</span>
                     </button>
-                    <div class="session-content ${isOpenDefault ? 'open' : ''}">
+                    <div class="session-content open">
                         ${tasks.map(t => {
                             const isDone = kid.completedTasks && kid.completedTasks[t.id];
                             const itemSymbol = t.itemType === 'heart' ? '❤️' : '💎';
