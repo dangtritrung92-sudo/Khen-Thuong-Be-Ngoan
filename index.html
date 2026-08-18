@@ -1248,6 +1248,7 @@
                 });
             }
             
+            loadLocalCacheFirst();
             renderView();
             setInterval(updateRealtimeClock, 1000);
             updateRealtimeClock();
@@ -1335,6 +1336,39 @@
         let lastCheckedSlot = '';
         let lastCheckedDate = '';
 
+        /* ---------------- LOGIC AVATAR 2 LUỒNG (LOCAL STORAGE & FIREBASE) ---------------- */
+        function getLocalAvatar(kidId) {
+            try {
+                return localStorage.getItem('kid_avatar_' + kidId);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function setLocalAvatar(kidId, avatarData) {
+            try {
+                if (avatarData) {
+                    localStorage.setItem('kid_avatar_' + kidId, avatarData);
+                }
+            } catch (e) {
+                console.warn("Bộ nhớ Local Storage đầy hoặc không khả dụng:", e);
+            }
+        }
+
+        function loadLocalCacheFirst() {
+            try {
+                const saved = localStorage.getItem('kids_reward_dashboard_v10');
+                if (saved) {
+                    kidsData = JSON.parse(saved);
+                    validateKidsData();
+                } else {
+                    kidsData = getDefaultKids();
+                }
+            } catch (e) {
+                kidsData = getDefaultKids();
+            }
+        }
+
         function waitForFirebaseAndInit(retries = 0) {
             if (typeof firebase !== 'undefined') {
                 checkAndInitFirebase();
@@ -1343,9 +1377,11 @@
                     waitForFirebaseAndInit(retries + 1);
                 }, 50);
             } else {
-                alert("❌ Lỗi nghiêm trọng: Không thể kết nối thư viện Firebase để lưu trữ.\n\nPhương án: Vui lòng kiểm tra lại mạng kết nối hoặc tường lửa. Dữ liệu sẽ chạy tạm với bản nháp và KHÔNG ĐƯỢC LƯU LẠI.");
+                alert("❌ Lỗi kết nối thư viện Firebase. Ứng dụng chạy tạm thời với bộ nhớ máy.");
                 isFirebaseActive = false;
-                kidsData = getDefaultKids();
+                if (!kidsData || kidsData.length === 0) {
+                    kidsData = getDefaultKids();
+                }
                 renderView();
             }
         }
@@ -1371,11 +1407,31 @@
                     db.ref('kidsData').on('value', (snapshot) => {
                         const data = snapshot.val();
                         if (data) {
-                            kidsData = Array.isArray(data) ? data : Object.values(data);
+                            const rawKids = Array.isArray(data) ? data : Object.values(data);
+                            let needsReRender = false;
+
+                            rawKids.forEach(remoteKid => {
+                                const localAvatar = getLocalAvatar(remoteKid.id);
+                                if (!localAvatar) {
+                                    if (remoteKid.avatar) {
+                                        setLocalAvatar(remoteKid.id, remoteKid.avatar);
+                                    }
+                                } else if (remoteKid.avatar && remoteKid.avatar !== localAvatar) {
+                                    setLocalAvatar(remoteKid.id, remoteKid.avatar);
+                                    needsReRender = true;
+                                }
+                                remoteKid.avatar = getLocalAvatar(remoteKid.id) || remoteKid.avatar;
+                            });
+
+                            kidsData = rawKids;
                             validateKidsData();
                             checkAutoReset(true);
                             renderView();
                             renderActiveTimers();
+
+                            if (needsReRender) {
+                                renderView();
+                            }
                         } else {
                             if (kidsData.length === 0) {
                                 kidsData = getDefaultKids();
@@ -1408,7 +1464,7 @@
                                 if (cfg.resetPassword) resetPassword = cfg.resetPassword;
                                 if (cfg.adminPassword) adminPassword = cfg.adminPassword;
                             }
-                            saveData(); // Push to Firebase
+                            saveData();
                             renderView();
                             renderActiveTimers();
                             alert("✅ Đã load dữ liệu Local cũ và đồng bộ thành công lên Firebase!");
@@ -1433,11 +1489,18 @@
                 if (!kid.lastCollectedItems) kid.lastCollectedItems = [];
                 if (!kid.lastCheckinDate) kid.lastCheckinDate = new Date().toDateString();
                 if (!kid.tasks) kid.tasks = JSON.parse(JSON.stringify(DEFAULT_TASKS));
+
+                const cached = getLocalAvatar(kid.id);
+                if (cached) {
+                    kid.avatar = cached;
+                } else if (kid.avatar) {
+                    setLocalAvatar(kid.id, kid.avatar);
+                }
             });
         }
 
         function getDefaultKids() {
-            return [
+            const defaults = [
                 {
                     id: 'k1', name: 'Bảo Nam', pin: '1234',
                     avatar: DEFAULT_AVATAR_BOY,
@@ -1453,16 +1516,27 @@
                     tasks: JSON.parse(JSON.stringify(DEFAULT_TASKS))
                 }
             ];
+            defaults.forEach(k => {
+                const cached = getLocalAvatar(k.id);
+                if (cached) k.avatar = cached;
+                else setLocalAvatar(k.id, k.avatar);
+            });
+            return defaults;
         }
 
         function saveData() {
+            try {
+                localStorage.setItem('kids_reward_dashboard_v10', JSON.stringify(kidsData));
+                localStorage.setItem('system_config_v10', JSON.stringify({ managePassword, resetPassword, adminPassword }));
+            } catch(e) {}
+
             if (navigator.onLine && isFirebaseActive && db) {
                 db.ref('kidsData').set(kidsData).catch((error) => {
                     alert("❌ Lỗi đồng bộ Firebase: " + error.message + "\n\nPhương án: Vui lòng kiểm tra lại mạng Internet.");
                 });
                 db.ref('systemConfig').set({ managePassword, resetPassword, adminPassword }).catch(()=>{});
             } else {
-                alert("⚠️ Hệ thống đang mất kết nối Internet hoặc Firebase không khả dụng!\n\nDữ liệu của các bé hiện tại chưa được lưu đồng bộ. Hãy bật lại mạng để máy chủ cập nhật thông vị.");
+                alert("⚠️ Hệ thống đang mất kết nối Internet hoặc Firebase không khả dụng!\n\nDữ liệu của các bé hiện tại chưa được lưu đồng bộ.");
             }
         }
 
@@ -1577,7 +1651,6 @@
                     osc.type = 'triangle'; 
                     osc.frequency.setValueAtTime(melody[noteIndex], now);
                     gain.gain.setValueAtTime(0.001, now);
-                    // CHỈNH SỬA TẠI ĐÂY: Tăng gain từ 0.05 lên 0.90 để đạt 90% âm lượng tối đa
                     gain.gain.linearRampToValueAtTime(0.90, now + 0.04);
                     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
                     osc.connect(gain); gain.connect(ctx.destination);
@@ -1630,14 +1703,13 @@
             return 'evening';
         }
 
-        // TỐI ƯU: Chỉ hiển thị duy nhất hoạt động của buổi trong khung giờ hiện tại
         function checkSessionLockState(currentHour) {
             const activeSession = getCurrentSession(currentHour);
             document.querySelectorAll('.session-card').forEach(card => {
                 if (card.dataset.session !== activeSession) {
-                    card.style.display = 'none'; // Ẩn hoàn toàn các buổi khác
+                    card.style.display = 'none';
                 } else {
-                    card.style.display = 'flex'; // Chỉ hiện buổi hiện tại
+                    card.style.display = 'flex';
                     const content = card.querySelector('.session-content');
                     if (content) content.classList.add('open');
                 }
@@ -1702,7 +1774,6 @@
             }
         }
 
-        // TÍNH NĂNG MỚI: Game đập bong bóng pháo hoa
         function playFireworkGame(kidIndex, el) {
             playSound('pop');
             el.innerText = '💥';
@@ -1992,11 +2063,12 @@
             grid.innerHTML = '';
 
             kidsData.forEach((kid, idx) => {
+                const currentAvatar = getLocalAvatar(kid.id) || kid.avatar;
                 const card = document.createElement('div');
                 card.className = 'kid-select-card';
                 card.onclick = () => selectKid(idx);
                 card.innerHTML = `
-                    <img src="${kid.avatar}" class="select-avatar" alt="${kid.name}" loading="lazy">
+                    <img src="${currentAvatar}" class="select-avatar" alt="${kid.name}" loading="lazy">
                     <div class="select-name">${kid.name}</div>
                     <div class="select-diamond-badge">💎 ${(kid.diamonds || 0).toLocaleString()} • ❤️ ${(kid.hearts || 0).toLocaleString()}</div>
                     <div class="select-today-badge">Hôm nay: 💎+${(kid.todayDiamonds || 0).toLocaleString()} | ❤️+${(kid.todayHearts || 0).toLocaleString()}</div>
@@ -2015,6 +2087,7 @@
             const kidIndex = selectedKidIndex;
             const kid = kidsData[kidIndex];
             const activeSession = getCurrentSession(new Date().getHours());
+            const currentAvatar = getLocalAvatar(kid.id) || kid.avatar;
 
             const totalItems = (kid.diamonds || 0) + (kid.hearts || 0);
             const fillHeight = Math.min(100, Math.max(12, (totalItems / 2500) * 100));
@@ -2035,7 +2108,7 @@
                 <div class="left-sticky-col">
                     <div class="profile-section">
                         <div class="avatar-container">
-                            <img src="${kid.avatar}" class="avatar" alt="${kid.name}" loading="lazy">
+                            <img src="${currentAvatar}" class="avatar" alt="${kid.name}" loading="lazy">
                             <label class="upload-btn" title="Đổi ảnh đại diện">
                                 📷
                                 <input type="file" accept="image/*" style="display:none;" onchange="uploadAvatar(event, ${kidIndex})">
@@ -2128,14 +2201,12 @@
                 </div>
             `;
 
-            // Đoạn này đã được fix: Tạo div card và thêm class chuẩn xác
             const card = document.createElement('div');
             card.className = 'kid-column-card';
             card.innerHTML = html;
             grid.appendChild(card);
         }
 
-        // TỐI ƯU 1: Ẩn hoàn toàn nếu không phải buổi hiện tại
         function renderSessionCard(kidIndex, kid, sessionId, sessionTitle, sessionClass, isActiveSession) {
             const tasks = (kid.tasks && kid.tasks[sessionId]) ? kid.tasks[sessionId] : (DEFAULT_TASKS[sessionId] || []);
             const completedCount = tasks.filter(t => kid.completedTasks && kid.completedTasks[t.id]).length;
@@ -2215,7 +2286,10 @@
             if (file) {
                 const reader = new FileReader();
                 reader.onload = function (e) {
-                    kidsData[kidIndex].avatar = e.target.result;
+                    const avatarData = e.target.result;
+                    const kid = kidsData[kidIndex];
+                    kid.avatar = avatarData;
+                    setLocalAvatar(kid.id, avatarData);
                     saveData();
                     renderView();
                 };
@@ -2571,7 +2645,6 @@
 
             listEl.innerHTML = '';
             
-            // Lấy danh sách nhiệm vụ của bé đầu tiên làm mẫu đồng bộ
             const sampleKid = kidsData[0];
             const tasks = (sampleKid && sampleKid.tasks && sampleKid.tasks[session]) ? sampleKid.tasks[session] : (DEFAULT_TASKS[session] || []);
 
@@ -2704,11 +2777,12 @@
             container.innerHTML = '';
 
             kidsData.forEach((kid, idx) => {
+                const currentAvatar = getLocalAvatar(kid.id) || kid.avatar;
                 const div = document.createElement('div');
                 div.style.cssText = "display:flex; justify-content:space-between; align-items:center; background:white; padding:6px; border-radius:10px; border:1px solid #CBD5E0; margin-bottom:4px;";
                 div.innerHTML = `
                     <div style="display:flex; align-items:center; gap:8px;">
-                        <img src="${kid.avatar}" style="width:30px; height:30px; border-radius:50%; object-fit:cover;">
+                        <img src="${currentAvatar}" style="width:30px; height:30px; border-radius:50%; object-fit:cover;">
                         <div>
                             <div style="font-size:11px; font-weight:bold; color:#FF4757;">${kid.name}</div>
                             <div style="font-size:9px; color:#718096;">Mật khẩu bé: <b>${kid.pin || '1234'}</b></div>
@@ -2743,9 +2817,10 @@
 
                     const gender = confirm("Chọn giới tính cho bé:\nBấm 'OK' chọn Bé Trai\nBấm 'Cancel' chọn Bé Gái");
                     const avatar = gender ? DEFAULT_AVATAR_BOY : DEFAULT_AVATAR_GIRL;
+                    const newKidId = 'k_' + Date.now();
 
                     const newKid = {
-                        id: 'k_' + Date.now(),
+                        id: newKidId,
                         name: name.trim(),
                         pin: '1234',
                         avatar: avatar,
@@ -2758,6 +2833,7 @@
                         tasks: JSON.parse(JSON.stringify(DEFAULT_TASKS))
                     };
 
+                    setLocalAvatar(newKidId, avatar);
                     kidsData.push(newKid);
                     saveData();
                     populateKidSelectOptions();
@@ -2774,6 +2850,7 @@
                 onSuccess: () => {
                     const kid = kidsData[kidIdx];
                     if (confirm(`⚠️ Bạn có chắc chắn muốn xóa bé ${kid.name}? Dữ liệu sẽ không thể khôi phục!`)) {
+                        localStorage.removeItem('kid_avatar_' + kid.id);
                         kidsData.splice(kidIdx, 1);
                         if (selectedKidIndex === kidIdx) selectedKidIndex = null;
                         saveData();
@@ -2864,11 +2941,17 @@
         function exportBackupData() {
             openUniversalPinModal('ADMIN_AUTH', {
                 onSuccess: () => {
+                    const exportKids = kidsData.map(k => {
+                        return {
+                            ...k,
+                            avatar: getLocalAvatar(k.id) || k.avatar
+                        };
+                    });
                     const backupObj = {
                         version: 'v10',
                         exportDate: new Date().toISOString(),
                         systemConfig: { managePassword, resetPassword, adminPassword },
-                        kidsData: kidsData
+                        kidsData: exportKids
                     };
 
                     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupObj, null, 2));
@@ -2901,6 +2984,11 @@
                     const imported = JSON.parse(e.target.result);
                     if (imported && imported.kidsData) {
                         kidsData = imported.kidsData;
+                        kidsData.forEach(k => {
+                            if (k.avatar) {
+                                setLocalAvatar(k.id, k.avatar);
+                            }
+                        });
                         validateKidsData();
                         if (imported.systemConfig) {
                             if (imported.systemConfig.managePassword) managePassword = imported.systemConfig.managePassword;
