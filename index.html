@@ -656,7 +656,7 @@
             will-change: left, top, transform, opacity;
         }
 
-        /* ---------------- GAME TƯƠNG TÁC CẢM XÚC MỚI ---------------- */
+        /* ---------------- GAME TƯƠNG TÁC CẢM XÚC ---------------- */
         .in-column-game-box {
             background: linear-gradient(135deg, #FFF5F7 0%, #EBF8FF 100%);
             border: 1.5px solid #FF6B81; border-radius: 14px; padding: 6px; text-align: center;
@@ -1393,11 +1393,9 @@
             if (!avatarUrl) return;
             if (!kid.avatarHistory) kid.avatarHistory = [];
             
-            // Xóa nếu đã có để đưa lên đầu danh sách
             kid.avatarHistory = kid.avatarHistory.filter(img => img !== avatarUrl);
             kid.avatarHistory.unshift(avatarUrl);
             
-            // Giữ tối đa 3 ảnh gần nhất
             if (kid.avatarHistory.length > 3) {
                 kid.avatarHistory = kid.avatarHistory.slice(0, 3);
             }
@@ -1406,6 +1404,13 @@
         function loadLocalCacheFirst() {
             try {
                 const saved = localStorage.getItem('kids_reward_dashboard_v10');
+                const savedCfg = localStorage.getItem('system_config_v10');
+                if (savedCfg) {
+                    const cfg = JSON.parse(savedCfg);
+                    if (cfg.managePassword) managePassword = cfg.managePassword;
+                    if (cfg.resetPassword) resetPassword = cfg.resetPassword;
+                    if (cfg.adminPassword) adminPassword = cfg.adminPassword;
+                }
                 if (saved) {
                     kidsData = JSON.parse(saved);
                     validateKidsData();
@@ -1449,6 +1454,9 @@
                             if (cfg.managePassword) managePassword = cfg.managePassword;
                             if (cfg.resetPassword) resetPassword = cfg.resetPassword;
                             if (cfg.adminPassword) adminPassword = cfg.adminPassword;
+                            try {
+                                localStorage.setItem('system_config_v10', JSON.stringify({ managePassword, resetPassword, adminPassword }));
+                            } catch(e) {}
                         }
                     });
 
@@ -1475,6 +1483,15 @@
                             kidsData = rawKids;
                             validateKidsData();
                             checkAutoReset(true);
+                            
+                            // ĐỒNG BỘ DỮ LIỆU MỚI NHẤT VÀO LOCAL STORAGE NGAY KHI TẢI XONG TỪ FIREBASE
+                            try {
+                                localStorage.setItem('kids_reward_dashboard_v10', JSON.stringify(kidsData));
+                                localStorage.setItem('system_config_v10', JSON.stringify({ managePassword, resetPassword, adminPassword }));
+                            } catch(e) {
+                                console.warn("Lỗi lưu cache vào localStorage:", e);
+                            }
+
                             renderView();
                             renderActiveTimers();
 
@@ -1487,6 +1504,10 @@
                             }
                             db.ref('kidsData').set(kidsData);
                             db.ref('systemConfig').set({ managePassword, resetPassword, adminPassword });
+                            try {
+                                localStorage.setItem('kids_reward_dashboard_v10', JSON.stringify(kidsData));
+                                localStorage.setItem('system_config_v10', JSON.stringify({ managePassword, resetPassword, adminPassword }));
+                            } catch(e) {}
                             renderView();
                         }
                     });
@@ -2224,7 +2245,6 @@
             const bigDiamondsCount = Math.floor((kid.diamonds || 0) / 10000);
             const bigHeartsCount = Math.floor((kid.hearts || 0) / 10000);
 
-            // Xác định giao diện game đang chọn
             const currentMode = kid.currentGameMode || 'firework';
             let gameTitle = '🎈 Chạm Bóng - Bắn Pháo Hoa 🎆';
             let gameIcon = '🎈';
