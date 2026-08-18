@@ -656,6 +656,7 @@
             will-change: left, top, transform, opacity;
         }
 
+        /* ---------------- GAME TƯƠNG TÁC CẢM XÚC MỚI ---------------- */
         .in-column-game-box {
             background: linear-gradient(135deg, #FFF5F7 0%, #EBF8FF 100%);
             border: 1.5px solid #FF6B81; border-radius: 14px; padding: 6px; text-align: center;
@@ -669,6 +670,39 @@
         }
         .interactive-game-icon { font-size: 32px; cursor: pointer; user-select: none; transition: transform 0.1s; }
         .interactive-game-icon:active { transform: scale(0.8); }
+
+        .game-switch-btn {
+            background: white;
+            border: 1px solid #CBD5E0;
+            border-radius: 8px;
+            padding: 2px 8px;
+            font-size: 9px;
+            font-weight: 800;
+            color: #4A5568;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .game-switch-btn:hover { background: #EDF2F7; color: #2D3748; }
+
+        .avatar-history-badge-container {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            margin-top: 4px;
+        }
+        .avatar-thumb-mini {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1.5px solid #CBD5E0;
+            cursor: pointer;
+            transition: transform 0.15s, border-color 0.2s;
+        }
+        .avatar-thumb-mini:hover {
+            transform: scale(1.15);
+            border-color: #FF4757;
+        }
 
         /* ---------------- BỘ ĐẾM GIỜ & POPUP ---------------- */
         .sticky-timer-overlay-box {
@@ -1336,7 +1370,7 @@
         let lastCheckedSlot = '';
         let lastCheckedDate = '';
 
-        /* ---------------- LOGIC AVATAR 2 LUỒNG (LOCAL STORAGE & FIREBASE) ---------------- */
+        /* ---------------- LOGIC AVATAR 2 LUỒNG & HISTORY 3 ẢNH ---------------- */
         function getLocalAvatar(kidId) {
             try {
                 return localStorage.getItem('kid_avatar_' + kidId);
@@ -1352,6 +1386,20 @@
                 }
             } catch (e) {
                 console.warn("Bộ nhớ Local Storage đầy hoặc không khả dụng:", e);
+            }
+        }
+
+        function pushAvatarHistory(kid, avatarUrl) {
+            if (!avatarUrl) return;
+            if (!kid.avatarHistory) kid.avatarHistory = [];
+            
+            // Xóa nếu đã có để đưa lên đầu danh sách
+            kid.avatarHistory = kid.avatarHistory.filter(img => img !== avatarUrl);
+            kid.avatarHistory.unshift(avatarUrl);
+            
+            // Giữ tối đa 3 ảnh gần nhất
+            if (kid.avatarHistory.length > 3) {
+                kid.avatarHistory = kid.avatarHistory.slice(0, 3);
             }
         }
 
@@ -1421,6 +1469,7 @@
                                     needsReRender = true;
                                 }
                                 remoteKid.avatar = getLocalAvatar(remoteKid.id) || remoteKid.avatar;
+                                pushAvatarHistory(remoteKid, remoteKid.avatar);
                             });
 
                             kidsData = rawKids;
@@ -1489,6 +1538,8 @@
                 if (!kid.lastCollectedItems) kid.lastCollectedItems = [];
                 if (!kid.lastCheckinDate) kid.lastCheckinDate = new Date().toDateString();
                 if (!kid.tasks) kid.tasks = JSON.parse(JSON.stringify(DEFAULT_TASKS));
+                if (!kid.avatarHistory) kid.avatarHistory = [kid.avatar || DEFAULT_AVATAR_BOY];
+                if (!kid.currentGameMode) kid.currentGameMode = 'firework';
 
                 const cached = getLocalAvatar(kid.id);
                 if (cached) {
@@ -1496,6 +1547,7 @@
                 } else if (kid.avatar) {
                     setLocalAvatar(kid.id, kid.avatar);
                 }
+                pushAvatarHistory(kid, kid.avatar);
             });
         }
 
@@ -1504,16 +1556,20 @@
                 {
                     id: 'k1', name: 'Bảo Nam', pin: '1234',
                     avatar: DEFAULT_AVATAR_BOY,
+                    avatarHistory: [DEFAULT_AVATAR_BOY],
                     diamonds: 1250, todayDiamonds: 450, hearts: 850, todayHearts: 300, emotion: null, completedTasks: {}, lastCollectedItems: ['diamond', 'heart', 'heart', 'diamond'],
                     lastCheckinDate: new Date().toDateString(),
-                    tasks: JSON.parse(JSON.stringify(DEFAULT_TASKS))
+                    tasks: JSON.parse(JSON.stringify(DEFAULT_TASKS)),
+                    currentGameMode: 'firework'
                 },
                 {
                     id: 'k2', name: 'Thảo Nguyên', pin: '1234',
                     avatar: DEFAULT_AVATAR_GIRL,
+                    avatarHistory: [DEFAULT_AVATAR_GIRL],
                     diamonds: 1580, todayDiamonds: 600, hearts: 1200, todayHearts: 400, emotion: null, completedTasks: {}, lastCollectedItems: ['heart', 'heart', 'diamond', 'heart'],
                     lastCheckinDate: new Date().toDateString(),
-                    tasks: JSON.parse(JSON.stringify(DEFAULT_TASKS))
+                    tasks: JSON.parse(JSON.stringify(DEFAULT_TASKS)),
+                    currentGameMode: 'firework'
                 }
             ];
             defaults.forEach(k => {
@@ -1774,6 +1830,18 @@
             }
         }
 
+        /* ---------------- 3 MINI GAMES TƯƠNG TÁC TẠI Ô CẢM XÚC ---------------- */
+        function switchKidGameMode(kidIndex) {
+            playSound('pop');
+            const kid = kidsData[kidIndex];
+            const modes = ['firework', 'rainbow', 'traffic'];
+            const currentIndex = modes.indexOf(kid.currentGameMode || 'firework');
+            const nextMode = modes[(currentIndex + 1) % modes.length];
+            kid.currentGameMode = nextMode;
+            saveData();
+            renderView();
+        }
+
         function playFireworkGame(kidIndex, el) {
             playSound('pop');
             el.innerText = '💥';
@@ -1797,6 +1865,58 @@
             }, 400);
         }
 
+        function playRainbowGame(kidIndex, el) {
+            playSound('diamond');
+            el.style.transform = 'scale(1.3) rotate(20deg)';
+            
+            if (typeof confetti === 'function') {
+                const rect = el.getBoundingClientRect();
+                const x = (rect.left + rect.width / 2) / window.innerWidth;
+                const y = (rect.top + rect.height / 2) / window.innerHeight;
+                
+                confetti({
+                    particleCount: 50,
+                    spread: 90,
+                    origin: { x, y },
+                    colors: ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082', '#8B00FF']
+                });
+            }
+
+            setTimeout(() => {
+                el.style.transform = 'scale(1) rotate(0deg)';
+                const rainbowIcons = ['🌈', '✨', '⭐', '🦄', '🌟'];
+                el.innerText = rainbowIcons[Math.floor(Math.random() * rainbowIcons.length)];
+            }, 300);
+        }
+
+        function playTrafficGame(kidIndex, el) {
+            playSound('pop');
+            const lights = ['🔴', '🟡', '🟢'];
+            const currentLight = el.innerText;
+            let nextIndex = (lights.indexOf(currentLight) + 1) % lights.length;
+            if (nextIndex < 0) nextIndex = 0;
+            
+            el.innerText = lights[nextIndex];
+            el.style.transform = 'scale(1.2)';
+
+            if (lights[nextIndex] === '🟢') {
+                playSound('diamond');
+                if (typeof confetti === 'function') {
+                    const rect = el.getBoundingClientRect();
+                    confetti({
+                        particleCount: 30,
+                        spread: 50,
+                        origin: { x: (rect.left + rect.width / 2) / window.innerWidth, y: (rect.top + rect.height / 2) / window.innerHeight },
+                        colors: ['#48BB78', '#68D391', '#9AE6B4']
+                    });
+                }
+            }
+
+            setTimeout(() => {
+                el.style.transform = 'scale(1)';
+            }, 200);
+        }
+
         function openUniversalPinModal(mode, options = {}) {
             playSound('pop');
             pinModalMode = mode;
@@ -1814,7 +1934,7 @@
             if (mode === 'KID_LOGIN') {
                 pendingKidIndex = options.kidIndex;
                 const targetKid = kidsData[pendingKidIndex];
-                avatarImg.src = targetKid.avatar;
+                avatarImg.src = getLocalAvatar(targetKid.id) || targetKid.avatar;
                 avatarImg.style.display = 'block';
                 titleEl.innerText = `🔑 Mật khẩu bé ${targetKid.name}`;
             } else if (mode === 'TASK_SPECIFIC_PIN') {
@@ -2104,6 +2224,22 @@
             const bigDiamondsCount = Math.floor((kid.diamonds || 0) / 10000);
             const bigHeartsCount = Math.floor((kid.hearts || 0) / 10000);
 
+            // Xác định giao diện game đang chọn
+            const currentMode = kid.currentGameMode || 'firework';
+            let gameTitle = '🎈 Chạm Bóng - Bắn Pháo Hoa 🎆';
+            let gameIcon = '🎈';
+            let gameOnClick = `playFireworkGame(${kidIndex}, this)`;
+
+            if (currentMode === 'rainbow') {
+                gameTitle = '🌈 Cầu Vồng Ma Thuật ✨';
+                gameIcon = '🌈';
+                gameOnClick = `playRainbowGame(${kidIndex}, this)`;
+            } else if (currentMode === 'traffic') {
+                gameTitle = '🚦 Đèn Giao Thông Vui Nhộn 🟢';
+                gameIcon = '🟢';
+                gameOnClick = `playTrafficGame(${kidIndex}, this)`;
+            }
+
             let html = `
                 <div class="left-sticky-col">
                     <div class="profile-section">
@@ -2139,8 +2275,11 @@
                                 </div>
                                 
                                 <div class="in-column-game-box">
-                                    <div style="font-size:10px; font-weight:bold; color:#FF4757;">🎈 Chạm Bóng - Bắn Pháo Hoa 🎆</div>
-                                    <div class="interactive-game-icon" id="mini-game-icon-${kidIndex}" onclick="playFireworkGame(${kidIndex}, this)">🎈</div>
+                                    <div style="display:flex; justify-content:space-between; align-items:center; width:100%; padding:0 2px;">
+                                        <span style="font-size:9px; font-weight:bold; color:#FF4757;">${gameTitle}</span>
+                                        <button class="game-switch-btn" onclick="switchKidGameMode(${kidIndex})">Đổi game 🎮</button>
+                                    </div>
+                                    <div class="interactive-game-icon" id="mini-game-icon-${kidIndex}" onclick="${gameOnClick}">${gameIcon}</div>
                                 </div>
                             ` : `
                                 <div class="emotion-grid">
@@ -2290,10 +2429,25 @@
                     const kid = kidsData[kidIndex];
                     kid.avatar = avatarData;
                     setLocalAvatar(kid.id, avatarData);
+                    pushAvatarHistory(kid, avatarData);
                     saveData();
                     renderView();
                 };
                 reader.readAsDataURL(file);
+            }
+        }
+
+        function selectAvatarFromHistory(kidIdx, avatarUrl) {
+            const kid = kidsData[kidIdx];
+            if (kid && avatarUrl) {
+                kid.avatar = avatarUrl;
+                setLocalAvatar(kid.id, avatarUrl);
+                pushAvatarHistory(kid, avatarUrl);
+                saveData();
+                renderKidsManageList();
+                renderView();
+                playSound('chest');
+                alert(`✅ Đã đổi lại ảnh đại diện cho bé ${kid.name}!`);
             }
         }
 
@@ -2778,19 +2932,31 @@
 
             kidsData.forEach((kid, idx) => {
                 const currentAvatar = getLocalAvatar(kid.id) || kid.avatar;
+                const historyList = (kid.avatarHistory && kid.avatarHistory.length > 0) ? kid.avatarHistory : [currentAvatar];
+
                 const div = document.createElement('div');
-                div.style.cssText = "display:flex; justify-content:space-between; align-items:center; background:white; padding:6px; border-radius:10px; border:1px solid #CBD5E0; margin-bottom:4px;";
+                div.style.cssText = "display:flex; flex-direction:column; background:white; padding:6px; border-radius:10px; border:1px solid #CBD5E0; margin-bottom:6px; gap:4px;";
                 div.innerHTML = `
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <img src="${currentAvatar}" style="width:30px; height:30px; border-radius:50%; object-fit:cover;">
-                        <div>
-                            <div style="font-size:11px; font-weight:bold; color:#FF4757;">${kid.name}</div>
-                            <div style="font-size:9px; color:#718096;">Mật khẩu bé: <b>${kid.pin || '1234'}</b></div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <img src="${currentAvatar}" style="width:34px; height:34px; border-radius:50%; object-fit:cover; border:2px solid #FFD166;">
+                            <div>
+                                <div style="font-size:11px; font-weight:bold; color:#FF4757;">${kid.name}</div>
+                                <div style="font-size:9px; color:#718096;">Mật khẩu bé: <b>${kid.pin || '1234'}</b></div>
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:4px;">
+                            <button class="btn-save" style="font-size:9px; padding:3px 6px; background:#4A5568;" onclick="changeKidPin(${idx})">🔑 Đổi PIN</button>
+                            ${kidsData.length > 1 ? `<button class="btn-save" style="font-size:9px; padding:3px 6px; background:#E53E3E;" onclick="deleteKid(${idx})">🗑️ Xóa</button>` : ''}
                         </div>
                     </div>
-                    <div style="display:flex; gap:4px;">
-                        <button class="btn-save" style="font-size:9px; padding:3px 6px; background:#4A5568;" onclick="changeKidPin(${idx})">🔑 Đổi PIN</button>
-                        ${kidsData.length > 1 ? `<button class="btn-save" style="font-size:9px; padding:3px 6px; background:#E53E3E;" onclick="deleteKid(${idx})">🗑️ Xóa</button>` : ''}
+                    <div style="display:flex; align-items:center; justify-content:space-between; border-top:1px dashed #E2E8F0; padding-top:4px; margin-top:2px;">
+                        <span style="font-size:9px; color:#4A5568; font-weight:bold;">📸 3 Avatar gần nhất (bấm để chọn lại):</span>
+                        <div class="avatar-history-badge-container">
+                            ${historyList.map(imgSrc => `
+                                <img src="${imgSrc}" class="avatar-thumb-mini" title="Bấm để dùng lại ảnh này" onclick="selectAvatarFromHistory(${idx}, '${imgSrc}')">
+                            `).join('')}
+                        </div>
                     </div>
                 `;
                 container.appendChild(div);
@@ -2824,13 +2990,15 @@
                         name: name.trim(),
                         pin: '1234',
                         avatar: avatar,
+                        avatarHistory: [avatar],
                         diamonds: 0, todayDiamonds: 0,
                         hearts: 0, todayHearts: 0,
                         emotion: null,
                         completedTasks: {},
                         lastCollectedItems: [],
                         lastCheckinDate: new Date().toDateString(),
-                        tasks: JSON.parse(JSON.stringify(DEFAULT_TASKS))
+                        tasks: JSON.parse(JSON.stringify(DEFAULT_TASKS)),
+                        currentGameMode: 'firework'
                     };
 
                     setLocalAvatar(newKidId, avatar);
@@ -2987,6 +3155,7 @@
                         kidsData.forEach(k => {
                             if (k.avatar) {
                                 setLocalAvatar(k.id, k.avatar);
+                                pushAvatarHistory(k, k.avatar);
                             }
                         });
                         validateKidsData();
